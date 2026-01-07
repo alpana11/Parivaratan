@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { dbService } from '../services/dbService';
 import { useNavigate } from 'react-router-dom';
 import { DocumentType, PartnerDocument } from '../types';
-import { storage } from '../config/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const DocumentUploadPage: React.FC = () => {
-  const { user, partner } = useAuth();
+  const { user, partner, refreshPartner } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<PartnerDocument[]>([]);
   const [uploading, setUploading] = useState<{[key: string]: boolean}>({});
@@ -39,7 +36,12 @@ const DocumentUploadPage: React.FC = () => {
   ];
 
   const handleFileUpload = async (documentType: DocumentType, file: File) => {
-    if (!user) return;
+    console.log('Starting demo upload for:', documentType, 'User:', user?.uid);
+    if (!user) {
+      console.error('No user found for upload');
+      setErrors(prev => ({ ...prev, [documentType]: 'User not authenticated. Please sign in again.' }));
+      return;
+    }
 
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
@@ -59,46 +61,49 @@ const DocumentUploadPage: React.FC = () => {
     setErrors(prev => ({ ...prev, [documentType]: '' }));
 
     try {
-      // Create storage reference
-      const storageRef = ref(storage, `partners/${user.uid}/documents/${documentType}_${Date.now()}_${file.name}`);
-      setUploadProgress(prev => ({ ...prev, [documentType]: 25 }));
+      // Simulate upload progress for demo
+      const simulateUpload = () => {
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += Math.random() * 15 + 5; // Random progress between 5-20%
+          if (progress >= 100) {
+            progress = 100;
+            clearInterval(interval);
 
-      // Upload file to Firebase Storage
-      const snapshot = await uploadBytes(storageRef, file);
-      setUploadProgress(prev => ({ ...prev, [documentType]: 75 }));
+            // Create document object with blob URL for demo
+            const blobUrl = URL.createObjectURL(file);
+            const newDocument: PartnerDocument = {
+              type: documentType,
+              url: blobUrl,
+              uploadedAt: new Date().toISOString(),
+              verified: 'pending',
+              remarks: undefined
+            };
 
-      // Get download URL
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      setUploadProgress(prev => ({ ...prev, [documentType]: 90 }));
+            // Update documents array
+            const updatedDocuments = documents.filter(doc => doc.type !== documentType);
+            updatedDocuments.push(newDocument);
 
-      // Create document object
-      const newDocument: PartnerDocument = {
-        type: documentType,
-        url: downloadURL,
-        uploadedAt: new Date().toISOString(),
-        verified: 'pending',
-        remarks: undefined
+            setDocuments(updatedDocuments);
+            setUploadProgress(prev => ({ ...prev, [documentType]: 100 }));
+
+            // Clear progress after a moment
+            setTimeout(() => {
+              setUploadProgress(prev => ({ ...prev, [documentType]: 0 }));
+              setUploading(prev => ({ ...prev, [documentType]: false }));
+            }, 1000);
+
+          } else {
+            setUploadProgress(prev => ({ ...prev, [documentType]: Math.round(progress) }));
+          }
+        }, 200); // Update every 200ms
       };
 
-      // Update documents array
-      const updatedDocuments = documents.filter(doc => doc.type !== documentType);
-      updatedDocuments.push(newDocument);
-
-      // Update in database
-      await dbService.updatePartner(user.uid, { documents: updatedDocuments });
-
-      setDocuments(updatedDocuments);
-      setUploadProgress(prev => ({ ...prev, [documentType]: 100 }));
-
-      // Clear progress after a moment
-      setTimeout(() => {
-        setUploadProgress(prev => ({ ...prev, [documentType]: 0 }));
-      }, 1000);
+      simulateUpload();
 
     } catch (error) {
-      console.error('Error uploading document:', error);
+      console.error('Error in demo upload:', error);
       setErrors(prev => ({ ...prev, [documentType]: 'Failed to upload document. Please try again.' }));
-    } finally {
       setUploading(prev => ({ ...prev, [documentType]: false }));
     }
   };
@@ -117,21 +122,11 @@ const DocumentUploadPage: React.FC = () => {
     return requiredDocuments.every(doc => getDocumentStatus(doc.type) !== 'not_uploaded');
   };
 
-  const handleSubmitForVerification = async () => {
+  const handleSubmitForVerification = () => {
     if (!user || !isAllDocumentsUploaded()) return;
 
-    try {
-      // Update verification status to pending review
-      await dbService.updatePartner(user.uid, {
-        verificationStatus: 'pending'
-      });
-
-      // Navigate to verification pending page
-      navigate('/verification-pending');
-    } catch (error) {
-      console.error('Error submitting for verification:', error);
-      alert('Failed to submit documents for verification. Please try again.');
-    }
+    // For demo purposes, just navigate to verification pending page
+    navigate('/verification-pending');
   };
 
   const getStatusColor = (status: string) => {
@@ -252,26 +247,24 @@ const DocumentUploadPage: React.FC = () => {
             })}
 
             <div className="pt-4">
-              <button
-                onClick={handleSubmitForVerification}
-                disabled={!isAllDocumentsUploaded() || Object.values(uploading).some(u => u)}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-              >
-                {Object.values(uploading).some(u => u) ? (
-                  <div className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading Documents...
-                  </div>
-                ) : (
-                  'Submit for Verification'
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-4">
+                  {isAllDocumentsUploaded() ? 'All documents uploaded successfully!' : 'Please upload all required documents'}
+                </p>
+
+                {isAllDocumentsUploaded() && (
+                  <button
+                    onClick={handleSubmitForVerification}
+                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                  >
+                    Submit for Verification
+                  </button>
                 )}
-              </button>
-              <p className="mt-2 text-xs text-gray-500 text-center">
-                Required: ID Proof and Address Proof
-              </p>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Demo Mode: Documents are stored locally in your browser
+                </p>
+              </div>
             </div>
           </div>
         </div>

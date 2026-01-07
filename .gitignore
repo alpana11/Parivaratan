@@ -13,3 +13,6 @@ dist-ssr
 firestore-debug.log
 temp_file.tsx
 .vercel
+AzureAIDemo.tsx
+AzureAIDemoPage.tsx
+azureCognitive.ts

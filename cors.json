@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:5173", "https://parivartan-3a3db.web.app", "https://parivartan-3a3db.firebaseapp.com"],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "Accept-Encoding", "X-CSRF-Token"]
+  }
+]

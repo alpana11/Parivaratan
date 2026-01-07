@@ -30,20 +30,20 @@ const PartnerDashboard: React.FC = () => {
   }
 
   // Check partner status and subscription - only after partner data is loaded
-  if (currentPartner?.status === 'pending') {
+  if (currentPartner?.verificationStatus === 'pending') {
     return <Navigate to="/verification-pending" replace />;
   }
 
-  if (currentPartner?.status === 'approved' && (!currentPartner?.subscription || currentPartner?.subscription?.status !== 'active')) {
+  if (currentPartner?.verificationStatus === 'approved' && (!currentPartner?.subscription || currentPartner?.subscription?.status !== 'active')) {
     return <Navigate to="/subscription-plans" replace />;
   }
 
-  if (currentPartner && currentPartner?.status !== 'approved') {
+  if (currentPartner && currentPartner?.verificationStatus !== 'approved') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600 mb-4">Your account status: {currentPartner?.status}</p>
+          <p className="text-gray-600 mb-4">Your account status: {currentPartner?.verificationStatus}</p>
           <Link
             to="/verification-pending"
             className="text-green-600 hover:text-green-700"

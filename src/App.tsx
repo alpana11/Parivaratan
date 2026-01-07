@@ -48,6 +48,7 @@ function App() {
           <Route path="/subscription-plans" element={<SubscriptionPlansPage />} />
           <Route path="/make-payment" element={<MakePaymentPage />} />
           <Route path="/subscription-required" element={<SubscriptionRequiredPage />} />
+          <Route path="/azure-ai-demo" element={<AzureAIDemoPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/setup" element={<AdminSetupPage />} />
           <Route path="/admin" element={<AdminDashboard />}>

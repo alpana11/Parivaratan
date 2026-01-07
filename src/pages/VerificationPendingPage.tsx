@@ -30,7 +30,7 @@ const VerificationPendingPage: React.FC = () => {
               Verification Pending
             </h2>
             <p className="mt-2 text-sm text-gray-600 leading-relaxed">
-              Your documents have been submitted successfully. Our team is reviewing your application.
+              Documents submitted successfully!
             </p>
           </div>
 
