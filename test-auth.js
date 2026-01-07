@@ -1,19 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from 'firebase/auth';
-
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAhGzw2T-vCjQ9qCaPl0ruP5Df8Pqv5SPY",
-  authDomain: "parivartan-3a3db.firebaseapp.com",
-  projectId: "parivartan-3a3db",
-  storageBucket: "parivartan-3a3db.firebasestorage.app",
-  messagingSenderId: "258581842250",
-  appId: "1:258581842250:web:2fe5fc34122673ff5ed9b3"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+import { auth } from './src/config/firebase.js';
+import { connectAuthEmulator, createUserWithEmailAndPassword } from 'firebase/auth';
 
 // Connect to emulator
 try {

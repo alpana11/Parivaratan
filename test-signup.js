@@ -1,21 +1,7 @@
 // Test script to verify partner signup with real Firebase Auth + Firestore
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut, deleteUser } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-
-// Your Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyAhGzw2T-vCjQ9qCaPl0ruP5Df8Pqv5SPY",
-  authDomain: "parivartan-3a3db.firebaseapp.com",
-  projectId: "parivartan-3a3db",
-  storageBucket: "parivartan-3a3db.firebasestorage.app",
-  messagingSenderId: "258581842250",
-  appId: "1:258581842250:web:2fe5fc34122673ff5ed9b3"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+import { auth, db } from './src/config/firebase.js';
+import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 
 async function testPartnerSignup() {
   // Generate a completely unique email
