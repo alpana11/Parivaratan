@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { mockWasteRequests } from '../data/mockData';
 
 const LocationRoutesPage: React.FC = () => {
   const [selectedArea, setSelectedArea] = useState<string>('all');
@@ -18,7 +17,7 @@ const LocationRoutesPage: React.FC = () => {
   ];
 
   // Mock nearby requests (within 5km radius)
-  const nearbyRequests = mockWasteRequests.filter(() => {
+  const nearbyRequests = ([] as any[]).filter(() => {
     // Mock distance calculation - in real app, use actual geolocation
     const mockDistance = Math.random() * 10; // Random distance 0-10km
     return mockDistance <= 5;

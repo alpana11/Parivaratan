@@ -1,5 +1,4 @@
 import React from 'react';
-import { mockImpactMetrics, mockWasteRequests } from '../data/mockData';
 import {
   BarChart,
   Bar,
@@ -17,9 +16,13 @@ import {
   Area,
   AreaChart
 } from 'recharts';
+import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
 
 const ImpactAnalyticsPage: React.FC = () => {
-  const completedRequests = mockWasteRequests.filter(req => req.status === 'Completed');
+  const { requests } = useWasteRequests();
+  const { metrics } = useImpactMetrics();
+
+  const completedRequests = requests.filter(req => req.status === 'Completed');
   const wasteByType = completedRequests.reduce((acc, req) => {
     acc[req.type] = (acc[req.type] || 0) + parseInt(req.quantity);
     return acc;
@@ -32,10 +35,10 @@ const ImpactAnalyticsPage: React.FC = () => {
   ];
 
   // Prepare data for pie chart
-  const pieData = Object.entries(wasteByType).map(([type, amount]) => ({
+  const pieData = (Object.entries(wasteByType) as [string, number][]).map(([type, amount]) => ({
     name: type,
     value: amount,
-    percentage: Math.round((amount / mockImpactMetrics.wasteProcessed) * 100)
+    percentage: metrics.wasteProcessed > 0 ? Math.round((amount / metrics.wasteProcessed) * 100) : 0
   }));
 
   const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
@@ -66,7 +69,7 @@ const ImpactAnalyticsPage: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Waste Processed</p>
-              <p className="text-2xl font-bold text-gray-900">{mockImpactMetrics.wasteProcessed}kg</p>
+              <p className="text-2xl font-bold text-gray-900">{metrics.wasteProcessed}kg</p>
             </div>
           </div>
         </div>
@@ -80,7 +83,7 @@ const ImpactAnalyticsPage: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">CO₂ Reduced</p>
-              <p className="text-2xl font-bold text-gray-900">{mockImpactMetrics.co2Reduction}kg</p>
+              <p className="text-2xl font-bold text-gray-900">{metrics.co2Reduction}kg</p>
             </div>
           </div>
         </div>
@@ -111,7 +114,7 @@ const ImpactAnalyticsPage: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Completion Rate</p>
               <p className="text-2xl font-bold text-gray-900">
-                {Math.round((completedRequests.length / mockWasteRequests.length) * 100)}%
+                {requests.length > 0 ? Math.round((completedRequests.length / requests.length) * 100) : 0}%
               </p>
             </div>
           </div>
@@ -223,13 +226,13 @@ const ImpactAnalyticsPage: React.FC = () => {
           <div className="border-l-4 border-green-500 pl-4">
             <h3 className="font-medium text-gray-900">Top Performing Category</h3>
             <p className="text-sm text-gray-600 mt-1">
-              {Object.entries(wasteByType).sort(([,a], [,b]) => b - a)[0]?.[0] || 'N/A'} with highest waste collection
+              {(Object.entries(wasteByType) as [string, number][]).sort(([,a], [,b]) => b - a)[0]?.[0] || 'N/A'} with highest waste collection
             </p>
           </div>
           <div className="border-l-4 border-blue-500 pl-4">
             <h3 className="font-medium text-gray-900">Environmental Impact</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Your efforts have prevented {mockImpactMetrics.co2Reduction}kg of CO₂ emissions this month
+              Your efforts have prevented 0kg of CO₂ emissions this month
             </p>
           </div>
           <div className="border-l-4 border-yellow-500 pl-4">
@@ -241,7 +244,7 @@ const ImpactAnalyticsPage: React.FC = () => {
           <div className="border-l-4 border-purple-500 pl-4">
             <h3 className="font-medium text-gray-900">Efficiency Score</h3>
             <p className="text-sm text-gray-600 mt-1">
-              {Math.round((completedRequests.length / mockWasteRequests.length) * 100)}% of assigned requests completed
+              {requests.length > 0 ? Math.round((completedRequests.length / requests.length) * 100) : 0}% of assigned requests completed
             </p>
           </div>
         </div>

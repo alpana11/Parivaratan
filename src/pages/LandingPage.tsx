@@ -10,15 +10,23 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <h1 className="text-5xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">Parivartan</h1>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">Parivartan</h1>
             </div>
             <nav className="hidden md:flex space-x-8">
               <Link to="/" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
                 Home
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
+              <Link to="/signin" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
+                Partner Sign In
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
+              </Link>
               <Link to="/signup" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
                 Partner Sign-Up
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
+              </Link>
+              <Link to="/admin/setup" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
+                Admin Setup
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
             </nav>

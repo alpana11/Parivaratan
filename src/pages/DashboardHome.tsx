@@ -1,9 +1,14 @@
 import React from 'react';
-import { mockImpactMetrics, mockWasteRequests, mockPartner } from '../data/mockData';
+import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
+import { useAuth } from '../hooks/useAuth';
 
 const DashboardHome: React.FC = () => {
-  const activeRequests = mockWasteRequests.filter(req => req.status !== 'Completed');
-  const completedToday = mockWasteRequests.filter(req =>
+  const { partner } = useAuth();
+  const { requests } = useWasteRequests();
+  const { metrics } = useImpactMetrics();
+
+  const activeRequests = requests.filter(req => req.status !== 'Completed');
+  const completedToday = requests.filter(req =>
     req.status === 'Completed' &&
     new Date(req.date).toDateString() === new Date().toDateString()
   );
@@ -11,7 +16,7 @@ const DashboardHome: React.FC = () => {
   return (
     <div className="space-y-8">
       <div className="bg-gradient-to-r from-emerald-600 via-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-2xl">
-        <h1 className="text-3xl font-bold mb-2">Welcome back, {mockPartner.name}!</h1>
+        <h1 className="text-3xl font-bold mb-2">Welcome back, {partner?.name || 'Partner'}!</h1>
         <p className="text-emerald-100 text-lg">Here's your overview for today.</p>
       </div>
 
@@ -54,7 +59,7 @@ const DashboardHome: React.FC = () => {
             </div>
             <div className="ml-4 min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-600 truncate">Waste Processed</p>
-              <p className="text-2xl font-bold text-gray-900">{mockImpactMetrics.wasteProcessed}<span className="text-lg">kg</span></p>
+              <p className="text-2xl font-bold text-gray-900">{metrics.wasteProcessed}<span className="text-lg">kg</span></p>
             </div>
           </div>
         </div>
@@ -68,7 +73,7 @@ const DashboardHome: React.FC = () => {
             </div>
             <div className="ml-4 min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-600 truncate">Reward Points</p>
-              <p className="text-3xl font-bold text-gray-900">{mockPartner.rewardPoints}</p>
+              <p className="text-3xl font-bold text-gray-900">{partner?.rewardPoints || 0}</p>
             </div>
           </div>
         </div>
@@ -81,7 +86,7 @@ const DashboardHome: React.FC = () => {
         </div>
         <div className="p-6">
           <div className="space-y-6">
-            {mockWasteRequests.slice(0, 3).map((request) => (
+            {requests.slice(0, 3).map((request) => (
               <div key={request.id} className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300">
                 <div className="flex flex-col md:flex-row">
                   {/* Waste Image */}

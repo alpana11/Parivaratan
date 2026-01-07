@@ -1,288 +1,277 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { dbService } from '../services/dbService';
 import { useNavigate } from 'react-router-dom';
+import { DocumentType, PartnerDocument } from '../types';
+import { storage } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const DocumentUploadPage: React.FC = () => {
-  const [uploadedFiles, setUploadedFiles] = useState<{
-    governmentId: File | null;
-    addressProof: File | null;
-    businessRegistration: File | null;
-    bankAccount: File | null;
-  }>({
-    governmentId: null,
-    addressProof: null,
-    businessRegistration: null,
-    bankAccount: null,
-  });
+  const { user, partner } = useAuth();
   const navigate = useNavigate();
+  const [documents, setDocuments] = useState<PartnerDocument[]>([]);
+  const [uploading, setUploading] = useState<{[key: string]: boolean}>({});
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
 
-  const handleFileChange = (documentType: keyof typeof uploadedFiles) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setUploadedFiles(prev => ({
-      ...prev,
-      [documentType]: file,
-    }));
+  useEffect(() => {
+    if (partner?.documents) {
+      setDocuments(partner.documents);
+    }
+  }, [partner]);
+
+  const requiredDocuments: {type: DocumentType, label: string, description: string}[] = [
+    {
+      type: 'registration_certificate',
+      label: 'Registration Certificate',
+      description: 'Business registration or NGO registration certificate'
+    },
+    {
+      type: 'id_proof',
+      label: 'ID Proof',
+      description: 'Government issued ID (Aadhaar, PAN, Passport, etc.)'
+    },
+    {
+      type: 'address_proof',
+      label: 'Address Proof',
+      description: 'Utility bill, bank statement, or rental agreement'
+    }
+  ];
+
+  const handleFileUpload = async (documentType: DocumentType, file: File) => {
+    if (!user) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      setErrors(prev => ({ ...prev, [documentType]: 'Please upload a valid image (JPG, PNG) or PDF file' }));
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, [documentType]: 'File size must be less than 5MB' }));
+      return;
+    }
+
+    setUploading(prev => ({ ...prev, [documentType]: true }));
+    setUploadProgress(prev => ({ ...prev, [documentType]: 0 }));
+    setErrors(prev => ({ ...prev, [documentType]: '' }));
+
+    try {
+      // Create storage reference
+      const storageRef = ref(storage, `partners/${user.uid}/documents/${documentType}_${Date.now()}_${file.name}`);
+      setUploadProgress(prev => ({ ...prev, [documentType]: 25 }));
+
+      // Upload file to Firebase Storage
+      const snapshot = await uploadBytes(storageRef, file);
+      setUploadProgress(prev => ({ ...prev, [documentType]: 75 }));
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      setUploadProgress(prev => ({ ...prev, [documentType]: 90 }));
+
+      // Create document object
+      const newDocument: PartnerDocument = {
+        type: documentType,
+        url: downloadURL,
+        uploadedAt: new Date().toISOString(),
+        verified: 'pending',
+        remarks: undefined
+      };
+
+      // Update documents array
+      const updatedDocuments = documents.filter(doc => doc.type !== documentType);
+      updatedDocuments.push(newDocument);
+
+      // Update in database
+      await dbService.updatePartner(user.uid, { documents: updatedDocuments });
+
+      setDocuments(updatedDocuments);
+      setUploadProgress(prev => ({ ...prev, [documentType]: 100 }));
+
+      // Clear progress after a moment
+      setTimeout(() => {
+        setUploadProgress(prev => ({ ...prev, [documentType]: 0 }));
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      setErrors(prev => ({ ...prev, [documentType]: 'Failed to upload document. Please try again.' }));
+    } finally {
+      setUploading(prev => ({ ...prev, [documentType]: false }));
+    }
   };
 
-  const removeFile = (documentType: keyof typeof uploadedFiles) => {
-    setUploadedFiles(prev => ({
-      ...prev,
-      [documentType]: null,
-    }));
+  const getDocumentStatus = (type: DocumentType) => {
+    const doc = documents.find(d => d.type === type);
+    return doc ? doc.verified : 'not_uploaded';
   };
 
-  const handleSubmit = () => {
-    // Mock submission
-    console.log('Documents uploaded:', uploadedFiles);
-    navigate('/verification-pending');
+  const getDocumentUrl = (type: DocumentType) => {
+    const doc = documents.find(d => d.type === type);
+    return doc?.url;
   };
+
+  const isAllDocumentsUploaded = () => {
+    return requiredDocuments.every(doc => getDocumentStatus(doc.type) !== 'not_uploaded');
+  };
+
+  const handleSubmitForVerification = async () => {
+    if (!user || !isAllDocumentsUploaded()) return;
+
+    try {
+      // Update verification status to pending review
+      await dbService.updatePartner(user.uid, {
+        verificationStatus: 'pending'
+      });
+
+      // Navigate to verification pending page
+      navigate('/verification-pending');
+    } catch (error) {
+      console.error('Error submitting for verification:', error);
+      alert('Failed to submit documents for verification. Please try again.');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return 'text-green-600 bg-green-100';
+      case 'rejected': return 'text-red-600 bg-red-100';
+      case 'pending': return 'text-yellow-600 bg-yellow-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'approved': return 'Approved';
+      case 'rejected': return 'Rejected';
+      case 'pending': return 'Pending Review';
+      default: return 'Not Uploaded';
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent mb-2">Parivartan</h1>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Document Upload
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Please upload the required documents for verification
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent mb-2">Parivartan</h1>
+          <h2 className="text-3xl font-extrabold text-gray-900">Document Upload</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Please upload the required documents for verification
+          </p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white/90 backdrop-blur-sm py-8 px-4 shadow-2xl sm:rounded-2xl sm:px-10 border border-gray-100">
+        <div className="bg-white/90 backdrop-blur-sm py-8 px-6 shadow-2xl rounded-2xl border border-gray-100">
           <div className="space-y-6">
-            {/* Government ID Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Government ID (Aadhar/PAN/Driving License)
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-emerald-400 transition-colors duration-200 bg-gray-50 hover:bg-emerald-50/50">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-8 w-8 text-gray-400 hover:text-emerald-500 transition-colors duration-200"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="government-id-upload"
-                      className="relative cursor-pointer bg-white rounded-lg font-semibold text-emerald-600 hover:text-emerald-700 px-3 py-1 border border-emerald-300 hover:border-emerald-400 transition-all duration-200"
-                    >
-                      <span>Upload file</span>
-                      <input
-                        id="government-id-upload"
-                        name="government-id-upload"
-                        type="file"
-                        className="sr-only"
-                        onChange={handleFileChange('governmentId')}
-                        accept=".pdf,.jpg,.jpeg,.png"
-                      />
-                    </label>
-                    <p className="pl-1 self-center">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                </div>
-              </div>
-              {uploadedFiles.governmentId && (
-                <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200">
-                  <span className="text-sm text-gray-700 font-medium">{uploadedFiles.governmentId.name}</span>
-                  <button
-                    onClick={() => removeFile('governmentId')}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-full transition-all duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
+            {requiredDocuments.map((doc) => {
+              const status = getDocumentStatus(doc.type);
+              const isUploading = uploading[doc.type];
+              const progress = uploadProgress[doc.type];
+              const error = errors[doc.type];
 
-            {/* Address Proof Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Address Proof
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-blue-400 transition-colors duration-200 bg-gray-50 hover:bg-blue-50/50">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-8 w-8 text-gray-400 hover:text-blue-500 transition-colors duration-200"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="address-proof-upload"
-                      className="relative cursor-pointer bg-white rounded-lg font-semibold text-blue-600 hover:text-blue-700 px-3 py-1 border border-blue-300 hover:border-blue-400 transition-all duration-200"
-                    >
-                      <span>Upload file</span>
-                      <input
-                        id="address-proof-upload"
-                        name="address-proof-upload"
-                        type="file"
-                        className="sr-only"
-                        onChange={handleFileChange('addressProof')}
-                        accept=".pdf,.jpg,.jpeg,.png"
-                      />
-                    </label>
-                    <p className="pl-1 self-center">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                </div>
-              </div>
-              {uploadedFiles.addressProof && (
-                <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200">
-                  <span className="text-sm text-gray-700 font-medium">{uploadedFiles.addressProof.name}</span>
-                  <button
-                    onClick={() => removeFile('addressProof')}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-full transition-all duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
+              return (
+                <div key={doc.type}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {doc.label} {doc.type !== 'registration_certificate' ? '(Required)' : '(Optional)'}
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">{doc.description}</p>
 
-            {/* Business Registration Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Business Registration (if applicable)
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-indigo-400 transition-colors duration-200 bg-gray-50 hover:bg-indigo-50/50">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-8 w-8 text-gray-400 hover:text-indigo-500 transition-colors duration-200"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    <input
+                      type="file"
+                      id={doc.type}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleFileUpload(doc.type, file);
+                        }
+                      }}
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      disabled={isUploading}
                     />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
                     <label
-                      htmlFor="business-registration-upload"
-                      className="relative cursor-pointer bg-white rounded-lg font-semibold text-indigo-600 hover:text-indigo-700 px-3 py-1 border border-indigo-300 hover:border-indigo-400 transition-all duration-200"
+                      htmlFor={doc.type}
+                      className={`cursor-pointer inline-block px-6 py-3 rounded-lg transition-colors ${
+                        isUploading
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : status === 'not_uploaded'
+                          ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      }`}
                     >
-                      <span>Upload file</span>
-                      <input
-                        id="business-registration-upload"
-                        name="business-registration-upload"
-                        type="file"
-                        className="sr-only"
-                        onChange={handleFileChange('businessRegistration')}
-                        accept=".pdf,.jpg,.jpeg,.png"
-                      />
+                      {isUploading ? 'Uploading...' : status === 'not_uploaded' ? `📄 Upload ${doc.label}` : '📄 Re-upload'}
                     </label>
-                    <p className="pl-1 self-center">or drag and drop</p>
+                    <p className="text-xs text-gray-500 mt-2">PDF, JPG, PNG files only (max 5MB)</p>
                   </div>
-                  <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                </div>
-              </div>
-              {uploadedFiles.businessRegistration && (
-                <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200">
-                  <span className="text-sm text-gray-700 font-medium">{uploadedFiles.businessRegistration.name}</span>
-                  <button
-                    onClick={() => removeFile('businessRegistration')}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-full transition-all duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
 
-            {/* Bank Account Details Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Bank Account Details
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-purple-400 transition-colors duration-200 bg-gray-50 hover:bg-purple-50/50">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-8 w-8 text-gray-400 hover:text-purple-500 transition-colors duration-200"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="bank-account-upload"
-                      className="relative cursor-pointer bg-white rounded-lg font-semibold text-purple-600 hover:text-purple-700 px-3 py-1 border border-purple-300 hover:border-purple-400 transition-all duration-200"
-                    >
-                      <span>Upload file</span>
-                      <input
-                        id="bank-account-upload"
-                        name="bank-account-upload"
-                        type="file"
-                        className="sr-only"
-                        onChange={handleFileChange('bankAccount')}
-                        accept=".pdf,.jpg,.jpeg,.png"
-                      />
-                    </label>
-                    <p className="pl-1 self-center">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                </div>
-              </div>
-              {uploadedFiles.bankAccount && (
-                <div className="mt-3 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200">
-                  <span className="text-sm text-gray-700 font-medium">{uploadedFiles.bankAccount.name}</span>
-                  <button
-                    onClick={() => removeFile('bankAccount')}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-full transition-all duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
+                  {isUploading && progress > 0 && (
+                    <div className="mt-3">
+                      <div className="bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">{progress}% uploaded</p>
+                    </div>
+                  )}
 
-            <div>
+                  {status !== 'not_uploaded' && !isUploading && (
+                    <div className="mt-3 p-3 bg-green-50 rounded-lg flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-green-600">✅</span>
+                        <span className="text-green-800 text-sm">Uploaded successfully</span>
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(status)}`}>
+                        {getStatusText(status)}
+                      </span>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg">
+                      <p className="text-red-800 text-sm">❌ {error}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="pt-4">
               <button
-                onClick={handleSubmit}
-                disabled={!uploadedFiles.governmentId || !uploadedFiles.addressProof}
+                onClick={handleSubmitForVerification}
+                disabled={!isAllDocumentsUploaded() || Object.values(uploading).some(u => u)}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                Submit for Verification
+                {Object.values(uploading).some(u => u) ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Uploading Documents...
+                  </div>
+                ) : (
+                  'Submit for Verification'
+                )}
               </button>
+              <p className="mt-2 text-xs text-gray-500 text-center">
+                Required: ID Proof and Address Proof
+              </p>
             </div>
           </div>
         </div>

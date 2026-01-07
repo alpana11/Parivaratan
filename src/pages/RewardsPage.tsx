@@ -1,40 +1,106 @@
-import React, { useState } from 'react';
-import { mockPartner, mockVouchers, mockRewardTransactions } from '../data/mockData';
-import { Voucher } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Voucher, RewardRule } from '../types';
+import { useAuth } from '../hooks/useAuth';
+import { dbService } from '../services/dbService';
 
 const RewardsPage: React.FC = () => {
-  const [vouchers, setVouchers] = useState<Voucher[]>(mockVouchers);
+  const { partner } = useAuth();
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [rewardRules, setRewardRules] = useState<RewardRule[]>([]);
+  const [partnerRewardPoints, setPartnerRewardPoints] = useState(0);
+  const [redeemedVouchers, setRedeemedVouchers] = useState<any[]>([]);
   const [showRedeemModal, setShowRedeemModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  useEffect(() => {
+    // Load partner points from localStorage
+    const currentPartner = JSON.parse(localStorage.getItem('currentPartner') || '{}');
+    const partnersData = JSON.parse(localStorage.getItem('partners') || '[]');
+
+    let partnerData = currentPartner;
+    if (!partnerData.email && partnersData.length > 0) {
+      partnerData = partnersData[0];
+    }
+
+    setPartnerRewardPoints(partnerData.rewardPoints || 1250);
+
+    // Load redeemed vouchers from localStorage
+    const redeemed = JSON.parse(localStorage.getItem('redeemedVouchers') || '[]');
+    setRedeemedVouchers(redeemed);
+
+    // Set up real-time listeners for Firestore data
+    const unsubscribeRewardRules = dbService.listenToRewardRules((rules) => {
+      setRewardRules(rules);
+    });
+
+    const unsubscribeVouchers = dbService.listenToVouchers((voucherList) => {
+      setVouchers(voucherList);
+    });
+
+    return () => {
+      unsubscribeRewardRules();
+      unsubscribeVouchers();
+    };
+  }, []);
 
   const handleRedeemClick = (voucher: Voucher) => {
     setSelectedVoucher(voucher);
     setShowRedeemModal(true);
   };
 
-  const confirmRedemption = () => {
-    if (selectedVoucher && mockPartner.rewardPoints >= selectedVoucher.pointsRequired) {
-      // Mock redemption - update voucher status and deduct points
-      setVouchers(prev =>
-        prev.map(v =>
-          v.id === selectedVoucher.id
-            ? { ...v, status: 'redeemed', redeemedDate: new Date().toISOString() }
-            : v
-        )
-      );
+  const confirmRedemption = async () => {
+    if (!selectedVoucher) return;
 
-      // In a real app, this would update the partner's points
+    if (partnerRewardPoints < selectedVoucher.pointsRequired) return;
+
+    try {
+      // Update points in localStorage
+      const newPoints = partnerRewardPoints - selectedVoucher.pointsRequired;
+      setPartnerRewardPoints(newPoints);
+      
+      // Update partner data in localStorage
+      const currentPartner = JSON.parse(localStorage.getItem('currentPartner') || '{}');
+      currentPartner.rewardPoints = newPoints;
+      localStorage.setItem('currentPartner', JSON.stringify(currentPartner));
+      
+      // Add to redeemed vouchers
+      const redeemed = JSON.parse(localStorage.getItem('redeemedVouchers') || '[]');
+      redeemed.push({
+        ...selectedVoucher,
+        redeemedDate: new Date().toISOString(),
+        redeemedBy: currentPartner.id || 'demo-partner'
+      });
+      localStorage.setItem('redeemedVouchers', JSON.stringify(redeemed));
+      setRedeemedVouchers(redeemed);
+
       setShowRedeemModal(false);
       setShowSuccessMessage(true);
 
-      // Hide success message after 3 seconds
       setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      console.error('Error redeeming voucher:', error);
+      alert('Failed to redeem voucher');
     }
   };
 
-  const availableVouchers = vouchers.filter(v => v.status === 'available');
-  const redeemedVouchers = vouchers.filter(v => v.status === 'redeemed');
+  const availableVouchers = vouchers.filter(voucher => {
+    // Check if voucher is already redeemed
+    const isRedeemed = redeemedVouchers.find(r => r.id === voucher.id);
+    if (isRedeemed) return false;
+
+    // Check if voucher is assigned to this partner or available to all
+    const partnerId = partner?.id;
+    if (!partnerId) return false;
+
+    // If voucher has assignedPartners, check if this partner is included
+    if (voucher.assignedPartners && voucher.assignedPartners.length > 0) {
+      return voucher.assignedPartners.includes(partnerId);
+    }
+
+    // If no assignedPartners specified, voucher is available to all partners
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -51,8 +117,8 @@ const RewardsPage: React.FC = () => {
             <p className="text-amber-100">Earn points by completing waste pickups</p>
           </div>
           <div className="text-right">
-            <div className="text-4xl font-bold">{mockPartner.rewardPoints}</div>
-            <div className="text-amber-100">Points</div>
+            <div className="text-4xl font-bold">0</div>
+            <div className="text-amber-100">Points Available</div>
           </div>
         </div>
       </div>
@@ -68,6 +134,30 @@ const RewardsPage: React.FC = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-green-800">Voucher redeemed successfully!</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reward Rules */}
+      {rewardRules.length > 0 && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Reward Rules</h2>
+            <div className="space-y-4">
+              {rewardRules.map((rule) => (
+                <div key={rule.id} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{rule.wasteType}</h3>
+                      <p className="text-sm text-gray-600">Points per kg</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-green-600">+{rule.pointsPerKg} Points/kg</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -101,9 +191,9 @@ const RewardsPage: React.FC = () => {
                       <span className="text-lg font-bold text-amber-600">{voucher.pointsRequired} Points</span>
                       <button
                         onClick={() => handleRedeemClick(voucher)}
-                        disabled={mockPartner.rewardPoints < voucher.pointsRequired}
+                        disabled={partnerRewardPoints < voucher.pointsRequired}
                         className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                          mockPartner.rewardPoints >= voucher.pointsRequired
+                          partnerRewardPoints >= voucher.pointsRequired
                             ? 'bg-amber-500 text-white hover:bg-amber-600'
                             : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                         }`}
@@ -154,34 +244,50 @@ const RewardsPage: React.FC = () => {
       {/* Reward History */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Reward History</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
           <div className="space-y-4">
-            {mockRewardTransactions.map((transaction) => (
-              <div key={transaction.id} className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg mr-4 bg-green-100">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">Completed plastic waste pickup</p>
+                  <p className="text-sm text-gray-600">{new Date().toLocaleDateString()}</p>
+                </div>
+              </div>
+              <span className="font-semibold text-green-600">+50 Points</span>
+            </div>
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg mr-4 bg-green-100">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">Completed organic waste collection</p>
+                  <p className="text-sm text-gray-600">{new Date(Date.now() - 24 * 60 * 60 * 1000).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <span className="font-semibold text-green-600">+75 Points</span>
+            </div>
+            {redeemedVouchers.map((voucher, index) => (
+              <div key={index} className="flex items-center justify-between border-b pb-4">
                 <div className="flex items-center">
-                  <div className={`p-2 rounded-lg mr-4 ${
-                    transaction.type === 'earned' ? 'bg-green-100' : 'bg-red-100'
-                  }`}>
-                    <svg className={`w-5 h-5 ${
-                      transaction.type === 'earned' ? 'text-green-600' : 'text-red-600'
-                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {transaction.type === 'earned' ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                      )}
+                  <div className="p-2 rounded-lg mr-4 bg-red-100">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                     </svg>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{transaction.description}</p>
-                    <p className="text-sm text-gray-600">{new Date(transaction.date).toLocaleDateString()}</p>
+                    <p className="font-medium text-gray-900">Redeemed {voucher.title}</p>
+                    <p className="text-sm text-gray-600">{new Date(voucher.redeemedDate).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <span className={`font-semibold ${
-                  transaction.type === 'earned' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {transaction.type === 'earned' ? '+' : ''}{transaction.points} Points
-                </span>
+                <span className="font-semibold text-red-600">-{voucher.pointsRequired} Points</span>
               </div>
             ))}
           </div>

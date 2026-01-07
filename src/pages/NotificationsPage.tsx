@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { mockNotifications } from '../data/mockData';
 
 const NotificationsPage: React.FC = () => {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   const markAsRead = (id: string) => {
     setNotifications(prev =>

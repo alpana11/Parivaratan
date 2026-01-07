@@ -1,17 +1,49 @@
 import React from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { mockPartner } from '../data/mockData';
+import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 const PartnerDashboard: React.FC = () => {
   const location = useLocation();
+  const { user, partner, loading } = useAuth();
 
-  // Mock check - in real app, this would come from auth context
-  if (mockPartner.status !== 'approved') {
+  // Check for demo authentication
+  const demoAuth = localStorage.getItem('partnerAuth');
+  const demoPartner = localStorage.getItem('demoPartner');
+  const isAuthenticated = user || demoAuth;
+  const currentPartner = partner || (demoPartner ? JSON.parse(demoPartner) : null);
+
+  // Redirect to login if not authenticated
+  if (!loading && !isAuthenticated) {
+    return <Navigate to="/signin" replace />;
+  }
+
+  // Show loading state while auth is loading OR while partner data is being fetched
+  if (loading || (isAuthenticated && !currentPartner)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading your account...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check partner status and subscription - only after partner data is loaded
+  if (currentPartner?.status === 'pending') {
+    return <Navigate to="/verification-pending" replace />;
+  }
+
+  if (currentPartner?.status === 'approved' && (!currentPartner?.subscription || currentPartner?.subscription?.status !== 'active')) {
+    return <Navigate to="/subscription-plans" replace />;
+  }
+
+  if (currentPartner && currentPartner?.status !== 'approved') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600 mb-4">Your account is not yet approved.</p>
+          <p className="text-gray-600 mb-4">Your account status: {currentPartner?.status}</p>
           <Link
             to="/verification-pending"
             className="text-green-600 hover:text-green-700"
@@ -22,6 +54,9 @@ const PartnerDashboard: React.FC = () => {
       </div>
     );
   }
+
+  const partnerName = currentPartner?.name || 'Partner';
+  const partnerEmail = currentPartner?.email || 'partner@example.com';
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
@@ -40,7 +75,7 @@ const PartnerDashboard: React.FC = () => {
       <div className="fixed inset-y-0 left-0 w-64 bg-white/95 backdrop-blur-sm shadow-2xl border-r border-gray-200">
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-center h-16 bg-gradient-to-r from-emerald-600 to-blue-600 shadow-lg">
-            <h1 className="text-xl font-bold text-white">Parivartan</h1>
+            <h1 className="text-4xl font-bold text-white">Parivartan</h1>
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-2">
@@ -65,13 +100,13 @@ const PartnerDashboard: React.FC = () => {
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
                   <span className="text-white text-sm font-bold">
-                    {mockPartner.name.charAt(0)}
+                    {partnerName.charAt(0)}
                   </span>
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-semibold text-gray-900">{mockPartner.name}</p>
-                <p className="text-xs text-gray-500">{mockPartner.email}</p>
+                <p className="text-sm font-semibold text-gray-900">{partnerName}</p>
+                <p className="text-xs text-gray-500">{partnerEmail}</p>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 const PartnerSignUpPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -17,7 +18,9 @@ const PartnerSignUpPage: React.FC = () => {
   });
 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [_loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { signUp } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -67,19 +70,69 @@ const PartnerSignUpPage: React.FC = () => {
     setCurrentStep(prev => prev - 1);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateStep(2)) {
-      // Mock submission - in real app, this would send to backend
-      console.log('Form submitted:', formData);
-      navigate('/document-upload');
+    if (!validateStep(2)) return;
+
+    setLoading(true);
+    try {
+      // Prepare partner data for Firebase
+      const partnerData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        organization: formData.organization,
+        partnerType: formData.partnerType,
+        address: formData.address,
+        verificationStatus: 'pending' as const,
+        documents: [],
+        rewardPoints: 0,
+        subscription: undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      // Call the actual signUp function to create Firebase user and store in database
+      await signUp(formData.email, formData.password, partnerData);
+
+      // Move to step 3 (subscription selection)
+      setCurrentStep(3);
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      let errorMessage = 'Failed to create account';
+      
+      // Handle Firebase Auth specific errors
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            errorMessage = 'This email is already registered. Please use a different email.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Please enter a valid email address.';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'Password should be at least 6 characters long.';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'Network error. Please check your internet connection.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many requests. Please try again later.';
+            break;
+          default:
+            errorMessage = error.message || 'Failed to create account';
+        }
+      }
+      
+      setErrors({ submit: errorMessage });
+    } finally {
+      setLoading(false);
     }
   };
 
   const steps = [
     { number: 1, title: 'Basic Information', description: 'Personal details and account setup' },
     { number: 2, title: 'Organizational Information', description: 'Organization and location details' },
-    { number: 3, title: 'Documents', description: 'Upload required documents' },
+    { number: 3, title: 'Document Upload', description: 'Upload verification documents' },
   ];
 
   return (
@@ -307,38 +360,23 @@ const PartnerSignUpPage: React.FC = () => {
               </>
             )}
 
-            {/* Step 3: Documents */}
+            {/* Step 3: Document Upload */}
             {currentStep === 3 && (
               <div className="text-center py-8">
                 <div className="mb-6">
                   <svg className="mx-auto h-16 w-16 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Document Upload Required</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Account Created Successfully!</h3>
                 <p className="text-gray-600 mb-6">
-                  Please upload the required documents to complete your registration.
+                  Your account has been created. Now upload your verification documents for admin approval.
                 </p>
-                <div className="bg-gray-50 rounded-lg p-4 text-left">
-                  <h4 className="font-semibold text-gray-900 mb-3">Required Documents:</h4>
-                  <ul className="space-y-2 text-sm text-gray-600">
-                    <li className="flex items-center">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3"></div>
-                      Government ID (Aadhar/PAN/Driving License)
-                    </li>
-                    <li className="flex items-center">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                      Address Proof
-                    </li>
-                    <li className="flex items-center">
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full mr-3"></div>
-                      Business Registration (if applicable)
-                    </li>
-                    <li className="flex items-center">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
-                      Bank Account Details
-                    </li>
-                  </ul>
+                <div className="bg-emerald-50 rounded-lg p-4 text-center">
+                  <h4 className="font-semibold text-emerald-900 mb-2">📋 Next Steps</h4>
+                  <p className="text-sm text-emerald-700">
+                    Upload required documents → Wait for admin approval → Choose subscription plan → Access dashboard
+                  </p>
                 </div>
               </div>
             )}
@@ -355,7 +393,7 @@ const PartnerSignUpPage: React.FC = () => {
                 </button>
               )}
 
-              {currentStep < 3 ? (
+              {currentStep < 2 ? (
                 <button
                   type="button"
                   onClick={nextStep}
@@ -363,12 +401,21 @@ const PartnerSignUpPage: React.FC = () => {
                 >
                   Next
                 </button>
-              ) : (
+              ) : currentStep === 2 ? (
                 <button
                   type="submit"
+                  disabled={_loading}
+                  className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  {_loading ? 'Creating Account...' : 'Create Account'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate('/document-upload')}
                   className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
                 >
-                  Continue to Document Upload
+                  Upload Documents
                 </button>
               )}
             </div>
