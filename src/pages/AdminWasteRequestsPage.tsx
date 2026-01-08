@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { WasteRequest, Partner } from '../types';
+import { useAdminWasteRequests } from '../hooks/useData';
 
 const AdminWasteRequestsPage: React.FC = () => {
-  const [requests, setRequests] = useState<WasteRequest[]>([]);
+  const { requests, loading } = useAdminWasteRequests();
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [partnersLoading, setPartnersLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<WasteRequest | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -13,21 +14,17 @@ const AdminWasteRequestsPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'location'>('date');
 
   useEffect(() => {
-    loadData();
+    loadPartners();
   }, []);
 
-  const loadData = async () => {
+  const loadPartners = async () => {
     try {
-      const [wasteRequests, allPartners] = await Promise.all([
-        dbService.getAllWasteRequests(),
-        dbService.getAllPartners()
-      ]);
-      setRequests(wasteRequests);
+      const allPartners = await dbService.getAllPartners();
       setPartners(allPartners);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading partners:', error);
     } finally {
-      setLoading(false);
+      setPartnersLoading(false);
     }
   };
 
@@ -46,16 +43,14 @@ const AdminWasteRequestsPage: React.FC = () => {
       // Create audit log
       await dbService.createAuditLog({
         adminId: 'admin',
-        actionType: 'waste_request_updated',
+        actionType: 'update',
         entityType: 'waste_request',
         entityId: requestId,
-        description: `Status updated to ${newStatus}`,
+        details: `Status updated to ${newStatus}`,
         metadata: { newStatus }
       });
       
-      setRequests(requests.map(req =>
-        req.id === requestId ? { ...req, status: newStatus } : req
-      ));
+      // No need to manually update state - real-time listener will handle it
     } catch (error) {
       console.error('Error updating status:', error);
     }
@@ -63,10 +58,8 @@ const AdminWasteRequestsPage: React.FC = () => {
 
   const handlePartnerAssignment = async (requestId: string, partnerId: string) => {
     try {
-      await dbService.updateWasteRequest(requestId, { assignedPartner: partnerId });
-      setRequests(requests.map(req =>
-        req.id === requestId ? { ...req, assignedPartner: partnerId } : req
-      ));
+      await dbService.updateWasteRequest(requestId, { partnerId: partnerId });
+      // No need to manually update state - real-time listener will handle it
       setShowModal(false);
     } catch (error) {
       console.error('Error assigning partner:', error);
@@ -108,7 +101,7 @@ const AdminWasteRequestsPage: React.FC = () => {
       const matchesSearch = searchTerm === '' ||
         request.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
         request.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getPartnerName(request.assignedPartner).toLowerCase().includes(searchTerm.toLowerCase());
+        getPartnerName(request.partnerId).toLowerCase().includes(searchTerm.toLowerCase());
       return matchesStatus && matchesSearch;
     })
     .sort((a, b) => {
@@ -124,7 +117,7 @@ const AdminWasteRequestsPage: React.FC = () => {
       }
     });
 
-  if (loading) {
+  if (loading || partnersLoading) {
     return (
       <div className="p-8">
         <div className="max-w-7xl mx-auto">
@@ -145,14 +138,10 @@ const AdminWasteRequestsPage: React.FC = () => {
     <div className="p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Waste Requests Management</h2>
-          <button
-            onClick={loadData}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-          >
-            <span>🔄</span>
-            <span>Refresh</span>
-          </button>
+          <h2 className="text-2xl font-bold text-gray-900">Waste Requests Management (Real-time)</h2>
+          <div className="text-sm text-gray-500 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+            🔴 Live Updates
+          </div>
         </div>
 
         {/* Filters and Search */}
@@ -273,12 +262,12 @@ const AdminWasteRequestsPage: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">
-                          <span className="font-medium">Assigned Partner:</span> {getPartnerName(request.assignedPartner)}
+                          <span className="font-medium">Assigned Partner:</span> {getPartnerName(request.partnerId)}
                         </p>
                         <p className="text-sm text-gray-600">
                           <span className="font-medium">AI Recommended:</span> {getPartnerName(request.aiRecommendedPartner)}
                         </p>
-                        {request.aiRecommendedPartner && request.assignedPartner !== request.aiRecommendedPartner && (
+                        {request.aiRecommendedPartner && request.partnerId !== request.aiRecommendedPartner && (
                           <p className="text-sm text-orange-600 font-medium">
                             ⚠️ Different from AI recommendation
                           </p>
@@ -309,7 +298,7 @@ const AdminWasteRequestsPage: React.FC = () => {
                         Assign Partner
                       </button>
 
-                      {request.aiRecommendedPartner && request.assignedPartner !== request.aiRecommendedPartner && (
+                      {request.aiRecommendedPartner && request.partnerId !== request.aiRecommendedPartner && (
                         <button
                           onClick={() => approveAIPartner(request)}
                           className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600"
@@ -356,7 +345,7 @@ const AdminWasteRequestsPage: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {partners
-                    .filter(p => p.status === 'approved')
+                    .filter(p => p.verificationStatus === 'approved')
                     .sort((a, b) => {
                       // Sort AI recommended partner first
                       if (a.id === selectedRequest.aiRecommendedPartner) return -1;

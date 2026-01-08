@@ -15,6 +15,7 @@ const PartnerProfilePage: React.FC = () => {
     organization: '',
     partnerType: '',
     address: '',
+    supportedWasteTypes: [] as string[],
     verificationStatus: 'pending' as 'pending' | 'approved' | 'rejected',
     documents: [] as any[],
     rewardPoints: 0,
@@ -44,6 +45,7 @@ const PartnerProfilePage: React.FC = () => {
               organization: partnerData.organization || '',
               partnerType: partnerData.partnerType || '',
               address: partnerData.address || '',
+              supportedWasteTypes: partnerData.supportedWasteTypes || [],
               verificationStatus: partnerData.verificationStatus || 'pending',
               documents: partnerData.documents || [],
               rewardPoints: partnerData.rewardPoints || 0,
@@ -58,6 +60,7 @@ const PartnerProfilePage: React.FC = () => {
               organization: '',
               partnerType: '',
               address: '',
+              supportedWasteTypes: [],
               verificationStatus: 'pending',
               documents: [],
               rewardPoints: 0,
@@ -86,6 +89,7 @@ const PartnerProfilePage: React.FC = () => {
         organization: partner.organization || '',
         partnerType: partner.partnerType || '',
         address: partner.address || '',
+        supportedWasteTypes: partner.supportedWasteTypes || [],
         verificationStatus: partner.verificationStatus || 'pending',
         documents: partner.documents || [],
         rewardPoints: partner.rewardPoints || 0,
@@ -105,6 +109,7 @@ const PartnerProfilePage: React.FC = () => {
         organization: profile.organization,
         partnerType: profile.partnerType,
         address: profile.address,
+        supportedWasteTypes: profile.supportedWasteTypes,
       });
       setIsEditing(false);
       alert('Profile updated successfully!');
@@ -277,6 +282,25 @@ const PartnerProfilePage: React.FC = () => {
               disabled={!isEditing}
               className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 bg-white disabled:bg-gray-100 disabled:text-gray-500 shadow-sm resize-none"
             />
+          </div>
+
+          {/* Supported Waste Types */}
+          <div className="mt-6 bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-2xl border border-gray-100">
+            <label className="block text-sm font-bold text-gray-700 mb-4">Supported Waste Types</label>
+            {profile.supportedWasteTypes && profile.supportedWasteTypes.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {profile.supportedWasteTypes.map((wasteType, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  >
+                    {wasteType.charAt(0).toUpperCase() + wasteType.slice(1)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No waste types specified</p>
+            )}
           </div>
 
           <div className="mt-8">

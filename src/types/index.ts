@@ -32,7 +32,8 @@ export interface WasteRequest {
   location: string;
   status: WasteRequestStatus;
   date: string; // ISO date
-  assignedPartner?: string; // Partner ID
+  partnerId?: string; // Partner ID assigned to this request
+  assignedPartner?: string; // Partner ID (deprecated, use partnerId)
   aiRecommendedPartner?: string;
 }
 
@@ -63,11 +64,11 @@ export interface Partner {
   organization?: string;
   partnerType?: string;
   address?: string;
+  supportedWasteTypes?: string[];
   subscription?: PartnerSubscription;
   subscriptionStatus?: SubscriptionStatus;
   serviceAreas?: string[];
   capacity?: string;
-  supportedWasteTypes?: string[];
   verificationRemarks?: string;
 }
 

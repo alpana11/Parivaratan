@@ -725,6 +725,27 @@ export const dbService = {
     });
   },
 
+  subscribeToWasteRequestsForPartner(partnerId: string, callback: (requests: WasteRequest[]) => void) {
+    console.log('subscribeToWasteRequestsForPartner: Setting up subscription for partner:', partnerId);
+    const q = query(collection(db, 'wasteRequests'), where('partnerId', '==', partnerId));
+    return onSnapshot(q, (querySnapshot) => {
+      console.log('subscribeToWasteRequestsForPartner: Snapshot received, docs count:', querySnapshot.docs.length);
+      const requests = querySnapshot.docs.map(doc => {
+        const data = {
+          id: doc.id,
+          ...doc.data(),
+          date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+        };
+        console.log('subscribeToWasteRequestsForPartner: Processing doc:', data);
+        return data;
+      }) as WasteRequest[];
+      console.log('subscribeToWasteRequestsForPartner: Final requests for partner', partnerId, ':', requests);
+      callback(requests);
+    }, (error) => {
+      console.error('subscribeToWasteRequestsForPartner: Error in subscription:', error);
+    });
+  },
+
   subscribeToPartners(callback: (partners: Partner[]) => void) {
     const q = collection(db, 'partners');
     return onSnapshot(q, (querySnapshot) => {

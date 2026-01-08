@@ -2,15 +2,25 @@ import React, { useState } from 'react';
 import { WasteRequest } from '../types';
 import { useWasteRequests } from '../hooks/useData';
 import { dbService } from '../services/dbService';
+import { useAuth } from '../hooks/useAuth';
 
 const AssignedWasteRequestsPage: React.FC = () => {
   const { requests, loading: _loading, refreshRequests } = useWasteRequests();
+  const { user } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<WasteRequest | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [requestToUpdate, setRequestToUpdate] = useState<string | null>(null);
   const [_updating, setUpdating] = useState(false);
+
+  // Debug logging
+  console.log('Partner Waste Requests Debug:', {
+    currentUserId: user?.uid,
+    requestsCount: requests.length,
+    requests: requests,
+    loading: _loading
+  });
 
   const handleViewDetails = (request: WasteRequest) => {
     setSelectedRequest(request);
@@ -33,7 +43,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
     setUpdating(true);
     try {
       await dbService.updateWasteRequest(requestToUpdate, { status: newStatus });
-      await refreshRequests();
+      // No need to manually refresh - real-time listener will handle it
       setShowStatusModal(false);
       setRequestToUpdate(null);
     } catch (error) {
@@ -66,7 +76,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
       }
 
       await dbService.updateWasteRequest(id, { status: newStatus });
-      await refreshRequests();
+      // No need to manually refresh - real-time listener will handle it
     } catch (error) {
       console.error('Error updating request:', error);
       alert('Failed to update request');
@@ -80,8 +90,11 @@ const AssignedWasteRequestsPage: React.FC = () => {
   return (
     <div className="space-y-8">
       <div className="bg-gradient-to-r from-emerald-600 via-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-2xl">
-        <h1 className="text-3xl font-bold mb-2">Assigned Waste Requests</h1>
-        <p className="text-emerald-100 text-lg">Manage your waste collection assignments</p>
+        <h1 className="text-3xl font-bold mb-2">Assigned Waste Requests (Real-time)</h1>
+        <p className="text-emerald-100 text-lg flex items-center">
+          <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+          Manage your waste collection assignments
+        </p>
       </div>
 
       <div className="bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden">
@@ -97,7 +110,17 @@ const AssignedWasteRequestsPage: React.FC = () => {
                 </svg>
               </div>
               <h3 className="mt-2 text-xl font-semibold text-gray-900">No active requests</h3>
-              <p className="mt-1 text-gray-600">All your requests have been completed. Great job!</p>
+              <p className="mt-1 text-gray-600">No waste requests have been assigned to you yet.</p>
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Debug Info:</strong><br/>
+                  Total requests loaded: {requests.length}<br/>
+                  Requests after filtering: {assignedRequests.length}<br/>
+                  {requests.length > 0 && (
+                    <span>Available requests: {requests.map(r => `${r.id} (partnerId: ${r.partnerId || 'none'})`).join(', ')}</span>
+                  )}
+                </p>
+              </div>
             </div>
           ) : (
             <div className="space-y-6">

@@ -15,6 +15,7 @@ const PartnerSignUpPage: React.FC = () => {
     organization: '',
     partnerType: '',
     address: '',
+    supportedWasteTypes: [] as string[],
   });
 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
@@ -38,6 +39,23 @@ const PartnerSignUpPage: React.FC = () => {
     }
   };
 
+  const handleWasteTypeChange = (wasteType: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      supportedWasteTypes: checked
+        ? [...prev.supportedWasteTypes, wasteType]
+        : prev.supportedWasteTypes.filter(type => type !== wasteType),
+    }));
+
+    // Clear error when user selects
+    if (errors.supportedWasteTypes) {
+      setErrors(prev => ({
+        ...prev,
+        supportedWasteTypes: '',
+      }));
+    }
+  };
+
   const validateStep = (step: number): boolean => {
     const newErrors: {[key: string]: string} = {};
 
@@ -53,6 +71,7 @@ const PartnerSignUpPage: React.FC = () => {
     } else if (step === 2) {
       if (!formData.organization.trim()) newErrors.organization = 'Organization name is required';
       if (!formData.partnerType) newErrors.partnerType = 'Partner type is required';
+      if (formData.partnerType && formData.supportedWasteTypes.length === 0) newErrors.supportedWasteTypes = 'Please select at least one waste type';
       if (!formData.address.trim()) newErrors.address = 'Address is required';
     }
 
@@ -84,6 +103,7 @@ const PartnerSignUpPage: React.FC = () => {
         organization: formData.organization,
         partnerType: formData.partnerType,
         address: formData.address,
+        supportedWasteTypes: formData.supportedWasteTypes,
         verificationStatus: 'pending' as const,
         documents: [],
         rewardPoints: 0,
@@ -337,6 +357,29 @@ const PartnerSignUpPage: React.FC = () => {
                     {errors.partnerType && <p className="mt-1 text-sm text-red-600">{errors.partnerType}</p>}
                   </div>
                 </div>
+
+                {/* Waste Types Selection - Only show after partner type is selected */}
+                {formData.partnerType && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      What type of waste can you handle? *
+                    </label>
+                    <div className="mt-1 grid grid-cols-2 gap-3">
+                      {['Plastic', 'Metal', 'Cloth / Textile', 'Paper', 'E-waste', 'Glass'].map((wasteType) => (
+                        <label key={wasteType} className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer transition-all duration-200">
+                          <input
+                            type="checkbox"
+                            checked={formData.supportedWasteTypes.includes(wasteType.toLowerCase())}
+                            onChange={(e) => handleWasteTypeChange(wasteType.toLowerCase(), e.target.checked)}
+                            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-3 text-sm font-medium text-gray-700">{wasteType}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {errors.supportedWasteTypes && <p className="mt-1 text-sm text-red-600">{errors.supportedWasteTypes}</p>}
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="address" className="block text-sm font-semibold text-gray-700 mb-2">
