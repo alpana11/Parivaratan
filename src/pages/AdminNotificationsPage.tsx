@@ -10,41 +10,83 @@ const AdminNotificationsPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterRecipient, setFilterRecipient] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [prevNotificationCount, setPrevNotificationCount] = useState(0);
 
   // Form state for creating notifications
   const [newNotification, setNewNotification] = useState({
     title: '',
     message: '',
     type: 'system' as Notification['type'],
-    category: 'general' as Notification['category'],
-    priority: 'medium' as Notification['priority'],
-    targetPartners: [] as string[], // Empty array means broadcast to all
-    isBroadcast: true,
-    metadata: {} as any
+    recipientType: 'all-partners' as 'all-partners' | 'all-users' | 'partner' | 'user',
+    selectedPartnerId: '',
+    selectedUserId: '',
   });
+
+  const [users, setUsers] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
+    loadUsers();
+    
+    // Set up real-time listeners
+    const unsubscribeNotifications = dbService.subscribeToNotifications((notificationsData) => {
+      console.log('📬 Notifications received:', notificationsData.length, notificationsData);
+      
+      // Play sound if new notification
+      if (notificationsData.length > prevNotificationCount && prevNotificationCount > 0) {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+        audio.play().catch(e => console.log('Audio play failed:', e));
+      }
+      
+      setPrevNotificationCount(notificationsData.length);
+      setNotifications(notificationsData);
+    });
+
+    return () => {
+      unsubscribeNotifications();
+    };
   }, []);
+
+  const loadUsers = async () => {
+    try {
+      const usersSnapshot = await dbService.getAllWasteRequests();
+      const uniqueUsers = Array.from(
+        new Map(
+          usersSnapshot
+            .filter(wr => (wr as any).userId)
+            .map(wr => [(wr as any).userId, { id: (wr as any).userId, name: (wr as any).userName || 'User' }])
+        ).values()
+      );
+      setUsers(uniqueUsers as any[]);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
-      const [partnersData, notificationsData, wasteRequestsData] = await Promise.all([
+      const [partnersData, wasteRequestsData] = await Promise.all([
         dbService.getAllPartners(),
-        dbService.getAllNotifications(),
         dbService.getAllWasteRequests()
       ]);
 
       setPartners(partnersData);
-      setNotifications(notificationsData);
       setWasteRequests(wasteRequestsData);
     } catch (error) {
       console.error('Error loading notification data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getUserName = (notification: Notification) => {
+    if (notification.userId) {
+      const wasteRequest = wasteRequests.find(wr => (wr as any).userId === notification.userId);
+      return (wasteRequest as any)?.userName || 'User';
+    }
+    return null;
   };
 
   const handleCreateNotification = async () => {
@@ -54,34 +96,52 @@ const AdminNotificationsPage: React.FC = () => {
     }
 
     try {
-      if (newNotification.isBroadcast) {
-        // Create broadcast notification for all partners
+      if (newNotification.recipientType === 'all-partners') {
+        // Broadcast to all partners
         const notifications = partners.map(partner => ({
           partnerId: partner.id,
           title: newNotification.title,
           message: newNotification.message,
           type: newNotification.type,
-          category: newNotification.category,
-          priority: newNotification.priority,
           status: 'pending' as const,
-          metadata: newNotification.metadata
         }));
-
         await dbService.createBulkNotifications(notifications);
-      } else {
-        // Create targeted notifications
-        const notifications = newNotification.targetPartners.map(partnerId => ({
-          partnerId,
+      } else if (newNotification.recipientType === 'all-users') {
+        // Broadcast to all users
+        const notifications = users.map(user => ({
+          userId: user.id,
           title: newNotification.title,
           message: newNotification.message,
           type: newNotification.type,
-          category: newNotification.category,
-          priority: newNotification.priority,
           status: 'pending' as const,
-          metadata: newNotification.metadata
         }));
-
         await dbService.createBulkNotifications(notifications);
+      } else if (newNotification.recipientType === 'partner') {
+        // Send to specific partner
+        if (!newNotification.selectedPartnerId) {
+          alert('Please select a partner');
+          return;
+        }
+        await dbService.createNotification({
+          partnerId: newNotification.selectedPartnerId,
+          title: newNotification.title,
+          message: newNotification.message,
+          type: newNotification.type,
+          status: 'pending',
+        });
+      } else if (newNotification.recipientType === 'user') {
+        // Send to specific user
+        if (!newNotification.selectedUserId) {
+          alert('Please select a user');
+          return;
+        }
+        await dbService.createNotification({
+          userId: newNotification.selectedUserId,
+          title: newNotification.title,
+          message: newNotification.message,
+          type: newNotification.type,
+          status: 'pending',
+        });
       }
 
       // Reset form
@@ -89,15 +149,12 @@ const AdminNotificationsPage: React.FC = () => {
         title: '',
         message: '',
         type: 'system',
-        category: 'general',
-        priority: 'medium',
-        targetPartners: [],
-        isBroadcast: true,
-        metadata: {}
+        recipientType: 'all-partners',
+        selectedPartnerId: '',
+        selectedUserId: '',
       });
 
       setShowCreateModal(false);
-      loadData(); // Refresh data
     } catch (error) {
       console.error('Error creating notification:', error);
       alert('Failed to create notification');
@@ -107,23 +164,25 @@ const AdminNotificationsPage: React.FC = () => {
   const handleSendNotification = async (notificationId: string) => {
     try {
       await dbService.sendNotification(notificationId);
-      loadData(); // Refresh data
     } catch (error) {
       console.error('Error sending notification:', error);
       alert('Failed to send notification');
     }
   };
 
-  const handleSendBulkNotifications = async () => {
+  const handleClearAllNotifications = async () => {
+    if (!confirm('Are you sure you want to delete all notifications? This cannot be undone.')) {
+      return;
+    }
+    
     try {
-      const pendingNotifications = notifications.filter(n => n.status === 'pending');
-      for (const notification of pendingNotifications) {
-        await dbService.sendNotification(notification.id);
+      for (const notification of notifications) {
+        await dbService.deleteNotification(notification.id);
       }
-      loadData(); // Refresh data
+      alert('All notifications cleared successfully');
     } catch (error) {
-      console.error('Error sending bulk notifications:', error);
-      alert('Failed to send bulk notifications');
+      console.error('Error clearing notifications:', error);
+      alert('Failed to clear notifications');
     }
   };
 
@@ -138,26 +197,6 @@ const AdminNotificationsPage: React.FC = () => {
       isBroadcast: false,
       metadata: {
         verificationStatus: partner.status
-      }
-    });
-    setShowCreateModal(true);
-  };
-
-  const createPickupAssignment = (wasteRequest: WasteRequest) => {
-    const assignedPartner = partners.find(p => p.id === wasteRequest.assignedPartner);
-    if (!assignedPartner) return;
-
-    setNewNotification({
-      title: 'New Pickup Assignment',
-      message: `You have been assigned a new pickup: ${wasteRequest.type} (${wasteRequest.quantity}) at ${wasteRequest.location}`,
-      type: 'pickup',
-      category: 'pickup_assignment',
-      priority: 'high',
-      targetPartners: [assignedPartner.id],
-      isBroadcast: false,
-      metadata: {
-        wasteRequestId: wasteRequest.id,
-        pickupDate: wasteRequest.date
       }
     });
     setShowCreateModal(true);
@@ -223,16 +262,19 @@ const AdminNotificationsPage: React.FC = () => {
 
   const filteredNotifications = notifications.filter(notification => {
     const matchesType = filterType === 'all' || notification.type === filterType;
-    const matchesStatus = filterStatus === 'all' || notification.status === filterStatus;
+    const matchesRecipient = filterRecipient === 'all' || 
+      (filterRecipient === 'partner' && notification.partnerId) ||
+      (filterRecipient === 'user' && notification.userId && !notification.partnerId) ||
+      (filterRecipient === 'broadcast' && !notification.partnerId && !notification.userId) ||
+      (filterRecipient === 'admin' && (notification as any).recipientCount);
     const matchesSearch = searchTerm === '' ||
       notification.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       notification.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (notification.partnerId && partners.find(p => p.id === notification.partnerId)?.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return matchesType && matchesStatus && matchesSearch;
+    return matchesType && matchesRecipient && matchesSearch;
   });
 
-  const pendingCount = notifications.filter(n => n.status === 'pending').length;
   const sentCount = notifications.filter(n => n.status === 'sent').length;
 
   if (loading) {
@@ -251,74 +293,54 @@ const AdminNotificationsPage: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">🔔 Notifications & Communication</h2>
           <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <div className="flex items-center space-x-4">
+            <button
+              onClick={handleClearAllNotifications}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Clear All
+            </button>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               + Create Notification
             </button>
-            {pendingCount > 0 && (
-              <button
-                onClick={handleSendBulkNotifications}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-              >
-                Send All Pending ({pendingCount})
-              </button>
-            )}
           </div>
         </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <button
-            onClick={createVerificationUpdate}
-            className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-left"
-          >
-            <div className="text-blue-600 font-medium">Verification Updates</div>
-            <div className="text-sm text-blue-500">Notify partners about verification status</div>
-          </button>
-          <button
-            onClick={createPickupAssignment}
-            className="p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors text-left"
-          >
-            <div className="text-purple-600 font-medium">Pickup Assignments</div>
-            <div className="text-sm text-purple-500">Notify about new pickup assignments</div>
-          </button>
-          <button
-            onClick={createRewardAnnouncement}
-            className="p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors text-left"
-          >
-            <div className="text-green-600 font-medium">Reward Announcements</div>
-            <div className="text-sm text-green-500">Announce reward points earned</div>
-          </button>
-          <button
-            onClick={createSubscriptionReminder}
-            className="p-4 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors text-left"
-          >
-            <div className="text-orange-600 font-medium">Subscription Reminders</div>
-            <div className="text-sm text-orange-500">Remind about subscription renewals</div>
-          </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+{/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow border">
             <div className="text-2xl font-bold text-blue-600">{notifications.length}</div>
             <div className="text-sm text-gray-600">Total Notifications</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-            <div className="text-sm text-gray-600">Pending</div>
+            <div className="text-2xl font-bold text-indigo-600">{notifications.filter(n => (n as any).recipientCount).length}</div>
+            <div className="text-sm text-gray-600">Admin Created</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-2xl font-bold text-green-600">{sentCount}</div>
-            <div className="text-sm text-gray-600">Sent</div>
+            <div className="text-2xl font-bold text-purple-600">{notifications.filter(n => n.partnerId).length}</div>
+            <div className="text-sm text-gray-600">Partner Notifications</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow border">
+            <div className="text-2xl font-bold text-green-600">{notifications.filter(n => n.userId && !n.partnerId).length}</div>
+            <div className="text-sm text-gray-600">User Notifications</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow border">
+            <div className="text-2xl font-bold text-yellow-600">{notifications.filter(n => n.status === 'pending').length}</div>
+            <div className="text-sm text-gray-600">Pending</div>
           </div>
         </div>
 
         {/* Filters */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
               <input
@@ -328,6 +350,20 @@ const AdminNotificationsPage: React.FC = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+              <select
+                value={filterRecipient}
+                onChange={(e) => setFilterRecipient(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Recipients</option>
+                <option value="admin">Admin Created</option>
+                <option value="partner">Partners</option>
+                <option value="user">Users/Citizens</option>
+                <option value="broadcast">Broadcast</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -345,24 +381,11 @@ const AdminNotificationsPage: React.FC = () => {
                 <option value="broadcast">Broadcast</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="sent">Sent</option>
-                <option value="failed">Failed</option>
-              </select>
-            </div>
             <div className="flex items-end">
               <button
                 onClick={() => {
                   setFilterType('all');
-                  setFilterStatus('all');
+                  setFilterRecipient('all');
                   setSearchTerm('');
                 }}
                 className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
@@ -383,16 +406,10 @@ const AdminNotificationsPage: React.FC = () => {
                     Notification
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Partner
+                    Recipient
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
@@ -415,7 +432,22 @@ const AdminNotificationsPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {partner ? partner.name : 'All Partners (Broadcast)'}
+                          {partner ? (
+                            <>
+                              <span className="font-medium">{partner.name}</span>
+                              <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Partner</span>
+                            </>
+                          ) : notification.userId ? (
+                            <>
+                              <span className="font-medium">{getUserName(notification)}</span>
+                              <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Citizen</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-medium">All Users</span>
+                              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Broadcast</span>
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -423,28 +455,10 @@ const AdminNotificationsPage: React.FC = () => {
                           {notification.type}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(notification.priority)}`}>
-                          {notification.priority}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(notification.status)}`}>
-                          {notification.status}
-                        </span>
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(notification.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {notification.status === 'pending' && (
-                          <button
-                            onClick={() => handleSendNotification(notification.id)}
-                            className="text-blue-600 hover:text-blue-900 mr-3"
-                          >
-                            Send
-                          </button>
-                        )}
                         <button
                           onClick={() => setSelectedNotification(notification)}
                           className="text-gray-600 hover:text-gray-900"
@@ -503,87 +517,63 @@ const AdminNotificationsPage: React.FC = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                      <select
-                        value={newNotification.type}
-                        onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification['type'] })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="system">System</option>
-                        <option value="verification">Verification</option>
-                        <option value="pickup">Pickup</option>
-                        <option value="reward">Reward</option>
-                        <option value="subscription">Subscription</option>
-                        <option value="broadcast">Broadcast</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <select
-                        value={newNotification.priority}
-                        onChange={(e) => setNewNotification({ ...newNotification, priority: e.target.value as Notification['priority'] })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Send To</label>
+                    <select
+                      value={newNotification.recipientType}
+                      onChange={(e) => setNewNotification({ ...newNotification, recipientType: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all-partners">All Partners</option>
+                      <option value="all-users">All Users</option>
+                      <option value="partner">Specific Partner</option>
+                      <option value="user">Specific User</option>
+                    </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                    <div className="space-y-2">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          checked={newNotification.isBroadcast}
-                          onChange={() => setNewNotification({ ...newNotification, isBroadcast: true, targetPartners: [] })}
-                          className="mr-2"
-                        />
-                        <span className="text-sm">Broadcast to all partners</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          checked={!newNotification.isBroadcast}
-                          onChange={() => setNewNotification({ ...newNotification, isBroadcast: false })}
-                          className="mr-2"
-                        />
-                        <span className="text-sm">Select specific partners</span>
-                      </label>
-                    </div>
-
-                    {!newNotification.isBroadcast && (
-                      <div className="mt-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
+                  {newNotification.recipientType === 'partner' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Partner</label>
+                      <select
+                        value={newNotification.selectedPartnerId}
+                        onChange={(e) => setNewNotification({ ...newNotification, selectedPartnerId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Choose a partner...</option>
                         {partners.map(partner => (
-                          <label key={partner.id} className="flex items-center mb-2">
-                            <input
-                              type="checkbox"
-                              checked={newNotification.targetPartners.includes(partner.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setNewNotification({
-                                    ...newNotification,
-                                    targetPartners: [...newNotification.targetPartners, partner.id]
-                                  });
-                                } else {
-                                  setNewNotification({
-                                    ...newNotification,
-                                    targetPartners: newNotification.targetPartners.filter(id => id !== partner.id)
-                                  });
-                                }
-                              }}
-                              className="mr-2"
-                            />
-                            <span className="text-sm">{partner.name}</span>
-                          </label>
+                          <option key={partner.id} value={partner.id}>{partner.name}</option>
                         ))}
-                      </div>
-                    )}
+                      </select>
+                    </div>
+                  )}
+
+                  {newNotification.recipientType === 'user' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+                      <select
+                        value={newNotification.selectedUserId}
+                        onChange={(e) => setNewNotification({ ...newNotification, selectedUserId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Choose a user...</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>{user.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notification Type</label>
+                    <select
+                      value={newNotification.type}
+                      onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification['type'] })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="system">System</option>
+                      <option value="reward">Reward</option>
+                      <option value="subscription">Subscription</option>
+                    </select>
                   </div>
                 </div>
 
@@ -598,7 +588,7 @@ const AdminNotificationsPage: React.FC = () => {
                     onClick={handleCreateNotification}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                   >
-                    Create Notification
+                    Send Notification
                   </button>
                 </div>
               </div>
@@ -646,17 +636,13 @@ const AdminNotificationsPage: React.FC = () => {
                       </span>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Status</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(selectedNotification.status)}`}>
-                        {selectedNotification.status}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Partner</label>
+                      <label className="block text-sm font-medium text-gray-700">Recipient</label>
                       <p className="text-sm text-gray-900">
                         {selectedNotification.partnerId
-                          ? partners.find(p => p.id === selectedNotification.partnerId)?.name || 'Unknown'
-                          : 'All Partners (Broadcast)'
+                          ? partners.find(p => p.id === selectedNotification.partnerId)?.name || 'Unknown Partner'
+                          : selectedNotification.userId
+                          ? getUserName(selectedNotification) || 'Unknown User'
+                          : 'All Users (Broadcast)'
                         }
                       </p>
                     </div>

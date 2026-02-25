@@ -1,8 +1,54 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { collection, addDoc, getDocs, Timestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const LandingPage: React.FC = () => {
   const [showLearnMore, setShowLearnMore] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
+    try {
+      console.log('Submitting contact form:', formData);
+      
+      const messageRef = await addDoc(collection(db, 'contactMessages'), {
+        ...formData,
+        createdAt: Timestamp.now(),
+        status: 'unread'
+      });
+      console.log('Contact message saved with ID:', messageRef.id);
+
+      const adminsSnapshot = await getDocs(collection(db, 'admins'));
+      console.log('Found admins:', adminsSnapshot.size);
+      
+      const notificationPromises = adminsSnapshot.docs.map(adminDoc => 
+        addDoc(collection(db, 'notifications'), {
+          type: 'contact_message',
+          message: `New contact message from ${formData.name} (${formData.email})`,
+          adminId: adminDoc.id,
+          createdAt: Timestamp.now(),
+          status: 'pending'
+        })
+      );
+      
+      await Promise.all(notificationPromises);
+      console.log('Notifications created for', adminsSnapshot.size, 'admins');
+      
+      setSubmitSuccess(true);
+      setFormData({ name: '', email: '', message: '' });
+      setTimeout(() => setSubmitSuccess(false), 3000);
+    } catch (error) {
+      console.error('Error submitting message:', error);
+      alert('Failed to send message: ' + (error as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100">
       {/* Header */}
@@ -245,7 +291,7 @@ const LandingPage: React.FC = () => {
             </div>
             <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
               <img
-                src="https://images.unsplash.com/photo-1586957969945-48e2bb3b45e8?w=300&h=200&fit=crop"
+                src="https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=300&h=200&fit=crop"
                 alt="Paper Waste"
                 className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
               />
@@ -337,11 +383,19 @@ const LandingPage: React.FC = () => {
             </div>
             <div>
               <h4 className="text-2xl font-semibold text-gray-900 mb-6">Send us a Message</h4>
-              <form className="space-y-4">
+              {submitSuccess && (
+                <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">
+                  Message sent successfully! We'll get back to you soon.
+                </div>
+              )}
+              <form className="space-y-4" onSubmit={handleSubmit}>
                 <div>
                   <input
                     type="text"
                     placeholder="Your Name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   />
                 </div>
@@ -349,6 +403,9 @@ const LandingPage: React.FC = () => {
                   <input
                     type="email"
                     placeholder="Your Email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   />
                 </div>
@@ -356,14 +413,18 @@ const LandingPage: React.FC = () => {
                   <textarea
                     rows={4}
                     placeholder="Your Message"
+                    value={formData.message}
+                    onChange={(e) => setFormData({...formData, message: e.target.value})}
+                    required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   ></textarea>
                 </div>
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-emerald-600 to-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                  disabled={submitting}
+                  className="w-full bg-gradient-to-r from-emerald-600 to-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-emerald-700 hover:to-blue-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send Message
+                  {submitting ? 'Sending...' : 'Send Message'}
                 </button>
               </form>
             </div>

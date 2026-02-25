@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { AuditLog, Partner, WasteRequest } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const AdminAuditPage: React.FC = () => {
   const { admin } = useAuth();
@@ -21,31 +23,35 @@ const AdminAuditPage: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   useEffect(() => {
+    // Set up real-time listener for audit logs
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(1000)),
+      (querySnapshot) => {
+        const logs = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp?.toDate?.()?.toISOString() || doc.data().timestamp
+        })) as AuditLog[];
+        setAuditLogs(logs);
+        setLoading(false);
+      }
+    );
+
+    // Load partners and waste requests
     loadData();
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadData();
-      setLastRefresh(new Date());
-    }, 30000);
-    
-    return () => clearInterval(interval);
+    return () => unsubscribe();
   }, []);
 
   const loadData = async () => {
     try {
-      // Load from localStorage for demo
-      const auditLogsData = JSON.parse(localStorage.getItem('auditLogs') || '[]');
-      const partnersData = JSON.parse(localStorage.getItem('partners') || '[]');
-      const wasteRequestsData = []; // Mock data for now
+      const partnersData = await dbService.getAllPartners();
+      const wasteRequestsData = await dbService.getAllWasteRequests();
 
-      setAuditLogs(auditLogsData);
       setPartners(partnersData);
       setWasteRequests(wasteRequestsData);
     } catch (error) {
-      console.error('Error loading audit data:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading data:', error);
     }
   };
 
@@ -125,103 +131,7 @@ const AdminAuditPage: React.FC = () => {
     return { id: adminId, name: adminLog?.adminName || 'Unknown Admin' };
   });
 
-  // Mock audit logs for demonstration (in real app, these would be created by actual admin actions)
-  const generateMockAuditLogs = () => {
-    const mockLogs: AuditLog[] = [
-      {
-        id: 'audit-1',
-        adminId: admin?.id || 'admin-1',
-        adminName: admin?.name || 'Admin User',
-        action: 'Partner Verification Approved',
-        actionType: 'verify',
-        details: 'Approved partner verification for Green Solutions Ltd with all required documents',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-        entityType: 'partner',
-        entityId: partners[0]?.id || 'partner-1',
-        metadata: {
-          verificationStatus: 'verified',
-          partnerId: partners[0]?.id || 'partner-1'
-        }
-      },
-      {
-        id: 'audit-2',
-        adminId: admin?.id || 'admin-1',
-        adminName: admin?.name || 'Admin User',
-        action: 'Waste Request Assignment Override',
-        actionType: 'override',
-        details: 'Manually reassigned waste request from AI recommendation to different partner',
-        timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago
-        entityType: 'waste_request',
-        entityId: wasteRequests[0]?.id || 'request-1',
-        previousValue: { assignedPartner: 'partner-ai' },
-        newValue: { assignedPartner: 'partner-manual' },
-        metadata: {
-          assignmentOverride: true,
-          wasteRequestId: wasteRequests[0]?.id || 'request-1'
-        }
-      },
-      {
-        id: 'audit-3',
-        adminId: admin?.id || 'admin-1',
-        adminName: admin?.name || 'Admin User',
-        action: 'Subscription Plan Updated',
-        actionType: 'update',
-        details: 'Changed subscription plan from Monthly to Yearly for premium partner',
-        timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 hours ago
-        entityType: 'subscription',
-        entityId: 'sub-123',
-        previousValue: { plan: 'monthly', amount: 50 },
-        newValue: { plan: 'yearly', amount: 500 },
-        metadata: {
-          subscriptionId: 'sub-123',
-          partnerId: partners[1]?.id || 'partner-2'
-        }
-      },
-      {
-        id: 'audit-4',
-        adminId: admin?.id || 'admin-1',
-        adminName: admin?.name || 'Admin User',
-        action: 'Reward Points Awarded',
-        actionType: 'create',
-        details: 'Manually awarded bonus reward points for exceptional service',
-        timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), // 8 hours ago
-        entityType: 'reward',
-        entityId: 'reward-456',
-        newValue: { points: 500, reason: 'Exceptional service bonus' },
-        metadata: {
-          rewardId: 'reward-456',
-          partnerId: partners[2]?.id || 'partner-3'
-        }
-      },
-      {
-        id: 'audit-5',
-        adminId: admin?.id || 'admin-1',
-        adminName: admin?.name || 'Admin User',
-        action: 'Voucher Redemption Processed',
-        actionType: 'update',
-        details: 'Processed voucher redemption request and updated inventory',
-        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12 hours ago
-        entityType: 'voucher',
-        entityId: 'voucher-789',
-        previousValue: { status: 'assigned', currentRedemptions: 0 },
-        newValue: { status: 'redeemed', currentRedemptions: 1 },
-        metadata: {
-          voucherId: 'voucher-789',
-          partnerId: partners[3]?.id || 'partner-4'
-        }
-      }
-    ];
 
-    if (auditLogs.length === 0) {
-      setAuditLogs(mockLogs);
-    }
-  };
-
-  useEffect(() => {
-    if (!loading && partners.length > 0 && wasteRequests.length > 0) {
-      generateMockAuditLogs();
-    }
-  }, [loading, partners, wasteRequests]);
 
   if (loading) {
     return (
@@ -239,6 +149,11 @@ const AdminAuditPage: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">📋 Audit Logs & Governance</h2>
           <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <div className="flex items-center space-x-4">
             <div className="text-sm text-gray-600">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
@@ -256,6 +171,7 @@ const AdminAuditPage: React.FC = () => {
               🔄 Refresh
             </button>
           </div>
+        </div>
         </div>
 
         {/* Stats */}

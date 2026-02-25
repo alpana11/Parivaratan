@@ -3,15 +3,17 @@ import { dbService } from '../services/dbService';
 import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction } from '../types';
 import { useAuth } from './useAuth';
 
+// Prevent circular dependency
+let cachedRequests: WasteRequest[] = [];
+
 export const useWasteRequests = () => {
   const [requests, setRequests] = useState<WasteRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updateCount, setUpdateCount] = useState(0);
   const { user } = useAuth();
 
   useEffect(() => {
-    console.log('useWasteRequests: User changed:', user?.uid);
-    
     if (!user) {
       setRequests([]);
       setLoading(false);
@@ -21,32 +23,19 @@ export const useWasteRequests = () => {
     setLoading(true);
     setError(null);
 
-    // TEMPORARY: Also fetch all requests to compare
-    dbService.getAllWasteRequests().then(allRequests => {
-      console.log('ALL WASTE REQUESTS IN DATABASE:', allRequests);
-      console.log('LOOKING FOR PARTNER ID:', user.uid);
-      const matchingRequests = allRequests.filter(req => req.partnerId === user.uid);
-      console.log('MATCHING REQUESTS FOR THIS PARTNER:', matchingRequests);
-      
-      // TEMPORARY FIX: If no matching requests, show all requests for testing
-      if (matchingRequests.length === 0 && allRequests.length > 0) {
-        console.log('No matching requests found, showing all requests for testing');
-        setRequests(allRequests);
-        setLoading(false);
-      }
-    });
-
-    // Set up real-time subscription
     const unsubscribe = dbService.subscribeToWasteRequestsForPartner(user.uid, (data) => {
-      console.log('useWasteRequests: Received data for partner', user.uid, ':', data);
       setRequests(data);
       setLoading(false);
+      setUpdateCount(prev => prev + 1);
     });
 
-    // Cleanup subscription on unmount or user change
+    const interval = setInterval(() => {
+      setUpdateCount(prev => prev + 1);
+    }, 20000);
+
     return () => {
-      console.log('useWasteRequests: Cleaning up subscription for', user.uid);
       unsubscribe();
+      clearInterval(interval);
     };
   }, [user]);
 
@@ -60,7 +49,7 @@ export const useWasteRequests = () => {
     }
   };
 
-  return { requests, loading, error, refreshRequests };
+  return { requests, loading, error, refreshRequests, streamActive: true, updateCount };
 };
 
 export const useImpactMetrics = () => {
@@ -68,6 +57,7 @@ export const useImpactMetrics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { requests } = useWasteRequests();
 
   useEffect(() => {
     if (!user) {
@@ -76,21 +66,20 @@ export const useImpactMetrics = () => {
       return;
     }
 
-    const fetchMetrics = async () => {
-      try {
-        setLoading(true);
-        const data = await dbService.getImpactMetrics(user.uid);
-        setMetrics(data);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch impact metrics');
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Calculate metrics from completed requests in real-time
+    const completedRequests = requests.filter(r => (r.status || '').toLowerCase() === 'completed');
+    const totalWaste = completedRequests.reduce((sum, req) => {
+      const quantity = parseFloat(req.quantity) || 0;
+      return sum + quantity;
+    }, 0);
+    const totalCO2 = totalWaste * 0.3; // 0.3kg CO2 per kg waste
 
-    fetchMetrics();
-  }, [user]);
+    setMetrics({
+      wasteProcessed: totalWaste,
+      co2Reduction: parseFloat(totalCO2.toFixed(2))
+    });
+    setLoading(false);
+  }, [user, requests]);
 
   return { metrics, loading, error };
 };
@@ -156,22 +145,26 @@ export const useAdminWasteRequests = () => {
   const [requests, setRequests] = useState<WasteRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
 
-    // Set up real-time subscription for all waste requests (admin)
     const unsubscribe = dbService.subscribeToWasteRequests((data) => {
       setRequests(data);
       setLoading(false);
     });
 
-    // Cleanup subscription on unmount
+    const interval = setInterval(() => {
+      setRefreshKey(prev => prev + 1);
+    }, 20000);
+
     return () => {
       unsubscribe();
+      clearInterval(interval);
     };
-  }, []);
+  }, [refreshKey]);
 
   return { requests, loading, error };
 };

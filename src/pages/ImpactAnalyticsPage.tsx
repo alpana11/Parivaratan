@@ -17,22 +17,52 @@ import {
   AreaChart
 } from 'recharts';
 import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
+import { dbService } from '../services/dbService';
+import { useAuth } from '../hooks/useAuth';
 
 const ImpactAnalyticsPage: React.FC = () => {
-  const { requests } = useWasteRequests();
+  const { user } = useAuth();
+  const { requests, streamActive: pathwayStreamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const { metrics } = useImpactMetrics();
 
-  const completedRequests = requests.filter(req => req.status === 'Completed');
+  const completedRequests = requests.filter(req => (req.status || '').toLowerCase() === 'completed');
   const wasteByType = completedRequests.reduce((acc, req) => {
-    acc[req.type] = (acc[req.type] || 0) + parseInt(req.quantity);
+    const wasteType = req.type || req.wasteType || 'Unknown';
+    const quantity = parseInt(req.quantity || req.itemCount || '0');
+    acc[wasteType] = (acc[wasteType] || 0) + quantity;
     return acc;
   }, {} as Record<string, number>);
 
-  const monthlyData = [
-    { month: 'Oct', waste: 120, co2: 36, requests: 45 },
-    { month: 'Nov', waste: 180, co2: 54, requests: 67 },
-    { month: 'Dec', waste: 250, co2: 75, requests: 89 },
-  ];
+  console.log('📊 WASTE DISTRIBUTION DEBUG:', {
+    totalRequests: requests.length,
+    completedRequests: completedRequests.length,
+    wasteByType,
+    sampleRequest: completedRequests[0]
+  });
+
+  // Calculate monthly data from real requests
+  const monthlyData = React.useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonth = new Date().getMonth();
+    const last3Months = [currentMonth - 2, currentMonth - 1, currentMonth].map(m => m < 0 ? m + 12 : m);
+    
+    return last3Months.map(monthIndex => {
+      const monthRequests = completedRequests.filter(req => {
+        const reqMonth = new Date(req.date).getMonth();
+        return reqMonth === monthIndex;
+      });
+      
+      const waste = monthRequests.reduce((sum, req) => sum + parseInt(req.quantity || '0'), 0);
+      const co2 = Math.round(waste * 0.3); // 30% CO2 reduction ratio
+      
+      return {
+        month: months[monthIndex],
+        waste,
+        co2,
+        requests: monthRequests.length
+      };
+    });
+  }, [completedRequests]);
 
   // Prepare data for pie chart
   const pieData = (Object.entries(wasteByType) as [string, number][]).map(([type, amount]) => ({
@@ -40,6 +70,8 @@ const ImpactAnalyticsPage: React.FC = () => {
     value: amount,
     percentage: metrics.wasteProcessed > 0 ? Math.round((amount / metrics.wasteProcessed) * 100) : 0
   }));
+
+  console.log('🥧 PIE CHART DATA:', pieData);
 
   const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
 
@@ -54,12 +86,22 @@ const ImpactAnalyticsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Impact & Analytics</h1>
-        <p className="text-gray-600">Track your environmental contribution and performance metrics</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Impact & Analytics</h1>
+            <p className="text-gray-600">Track your environmental contribution and performance metrics</p>
+          </div>
+          {pathwayStreamActive && (
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span className="text-xs text-green-700 font-medium">Pathway Live • {pathwayUpdateCount}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
@@ -90,22 +132,6 @@ const ImpactAnalyticsPage: React.FC = () => {
 
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Avg. Confidence</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {Math.round(completedRequests.reduce((sum, req) => sum + req.confidence, 0) / completedRequests.length)}%
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center">
             <div className="p-2 bg-purple-100 rounded-lg">
               <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
@@ -125,33 +151,68 @@ const ImpactAnalyticsPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Waste Distribution Pie Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Waste Distribution by Type</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Waste Distribution by Type</h2>
+            <div className="flex items-center space-x-2">
+              {pathwayStreamActive && (
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse mr-1"></span>
+                  Live
+                </span>
+              )}
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                {pieData.length} types
+              </span>
+            </div>
+          </div>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${percent}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {pieData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`${value}kg`, 'Waste']} />
-              </PieChart>
-            </ResponsiveContainer>
+            {pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%" key={pathwayUpdateCount}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    animationDuration={800}
+                  >
+                    {pieData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value}kg`, 'Waste']} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <div className="text-center">
+                  <svg className="mx-auto h-12 w-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className="text-sm">No completed pickups yet</p>
+                  <p className="text-xs mt-1">Complete waste requests to see distribution</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Monthly Performance Bar Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Performance Trends</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Monthly Performance Trends</h2>
+            {pathwayStreamActive && (
+              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse mr-1"></span>
+                Live
+              </span>
+            )}
+          </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
@@ -232,13 +293,13 @@ const ImpactAnalyticsPage: React.FC = () => {
           <div className="border-l-4 border-blue-500 pl-4">
             <h3 className="font-medium text-gray-900">Environmental Impact</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Your efforts have prevented 0kg of CO₂ emissions this month
+              Your efforts have prevented {monthlyData[monthlyData.length - 1]?.co2 || 0}kg of CO₂ emissions this month
             </p>
           </div>
           <div className="border-l-4 border-yellow-500 pl-4">
-            <h3 className="font-medium text-gray-900">AI Accuracy</h3>
+            <h3 className="font-medium text-gray-900">Total Requests</h3>
             <p className="text-sm text-gray-600 mt-1">
-              Average AI classification confidence: {Math.round(completedRequests.reduce((sum, req) => sum + req.confidence, 0) / completedRequests.length)}%
+              {completedRequests.length} completed out of {requests.length} total requests
             </p>
           </div>
           <div className="border-l-4 border-purple-500 pl-4">

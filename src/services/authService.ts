@@ -137,10 +137,27 @@ export const authService = {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Get partner data from Firestore
+      // Check if partner document exists
       const partnerDoc = await getDoc(doc(db, 'partners', user.uid));
+      
       if (!partnerDoc.exists()) {
-        throw new Error('Partner data not found');
+        // Create new partner document for first-time Google sign-in
+        const newPartner = {
+          id: user.uid,
+          email: user.email || '',
+          name: user.displayName || '',
+          phone: '',
+          organization: '',
+          partnerType: 'Individual' as const,
+          address: '',
+          verificationStatus: 'pending' as const,
+          documents: [],
+          rewardPoints: 0,
+          createdAt: new Date()
+        };
+        
+        await setDoc(doc(db, 'partners', user.uid), newPartner);
+        return { user, partner: newPartner };
       }
 
       return { user, partner: partnerDoc.data() as Partner };

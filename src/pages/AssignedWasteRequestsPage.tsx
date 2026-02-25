@@ -1,24 +1,114 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WasteRequest } from '../types';
 import { useWasteRequests } from '../hooks/useData';
 import { dbService } from '../services/dbService';
 import { useAuth } from '../hooks/useAuth';
 
 const AssignedWasteRequestsPage: React.FC = () => {
-  const { requests, loading: _loading, refreshRequests } = useWasteRequests();
-  const { user } = useAuth();
+  const { requests, loading: _loading, refreshRequests, streamActive, updateCount } = useWasteRequests();
+  const { user, partner } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<WasteRequest | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [requestToSchedule, setRequestToSchedule] = useState<string | null>(null);
   const [requestToUpdate, setRequestToUpdate] = useState<string | null>(null);
   const [_updating, setUpdating] = useState(false);
+  const [localRequests, setLocalRequests] = useState<WasteRequest[]>([]);
+
+  useEffect(() => {
+    setLocalRequests(requests);
+  }, [requests]);
+
+  const handleSchedulePickup = (requestId: string) => {
+    setRequestToSchedule(requestId);
+    setShowScheduleModal(true);
+  };
+
+  const handleScheduleSubmit = async (scheduleData: { method: 'pickup' | 'dropoff'; date: string; time: string }) => {
+    if (!requestToSchedule || !user) return;
+
+    setUpdating(true);
+    try {
+      const request = requests.find(r => r.id === requestToSchedule);
+      if (!request) {
+        alert('Request not found');
+        return;
+      }
+
+      // Update local state immediately
+      setLocalRequests(prev => prev.map(r => 
+        r.id === requestToSchedule 
+          ? { ...r, scheduleMethod: scheduleData.method, scheduledDate: scheduleData.date, scheduledTime: scheduleData.time }
+          : r
+      ));
+
+      setShowScheduleModal(false);
+      setRequestToSchedule(null);
+
+      await dbService.updateWasteRequest(requestToSchedule, {
+        scheduleMethod: scheduleData.method,
+        scheduledDate: scheduleData.date,
+        scheduledTime: scheduleData.time
+      });
+
+      await dbService.createScheduledPickup({
+        partnerId: user.uid,
+        requestId: requestToSchedule,
+        type: request.type,
+        userName: (request as any).userName || 'User',
+        phoneNumber: request.phoneNumber || (request as any).userPhone || 'N/A',
+        location: typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', '),
+        area: typeof request.location === 'string' ? request.location : request.location?.city || 'Unknown',
+        date: scheduleData.date,
+        time: scheduleData.time,
+        scheduledDate: scheduleData.date,
+        scheduledTime: scheduleData.time,
+        scheduleMethod: scheduleData.method,
+        status: 'scheduled'
+      });
+
+      // Send notification to user - try multiple userId field names
+      const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
+      if (userId) {
+        await dbService.createNotification({
+          type: 'waste_request',
+          message: `Your waste pickup has been scheduled for ${new Date(scheduleData.date).toLocaleDateString()} at ${scheduleData.time} by ${partner?.name || 'partner'}`,
+          userId: userId,
+          status: 'pending'
+        });
+        console.log('✅ Notification created for user:', userId);
+      } else {
+        console.warn('⚠️ No userId found in request:', request);
+      }
+
+      alert('Pickup scheduled successfully!');
+    } catch (error) {
+      console.error('Error scheduling pickup:', error);
+      setLocalRequests(requests);
+      alert('Failed to schedule pickup');
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   // Debug logging
-  console.log('Partner Waste Requests Debug:', {
-    currentUserId: user?.uid,
-    requestsCount: requests.length,
-    requests: requests,
+  console.log('📊 PARTNER DASHBOARD DEBUG:', {
+    partnerUID: user?.uid,
+    totalRequests: requests.length,
+    requestsByStatus: {
+      assigned: requests.filter(r => r.status === 'Assigned').length,
+      accepted: requests.filter(r => r.status === 'accepted').length,
+      completed: requests.filter(r => r.status === 'Completed').length,
+      rejected: requests.filter(r => r.status === 'rejected').length
+    },
+    requestDetails: requests.map(r => ({
+      id: r.id,
+      wasteType: r.type,
+      status: r.status,
+      statusType: typeof r.status
+    })),
     loading: _loading
   });
 
@@ -58,15 +148,18 @@ const AssignedWasteRequestsPage: React.FC = () => {
     setUpdating(true);
     try {
       let newStatus: WasteRequest['status'];
+      let notificationMessage = '';
+      
       switch (action) {
         case 'accept':
-          newStatus = 'Accepted';
+          newStatus = 'accepted';
+          notificationMessage = `Your waste request has been accepted by ${partner?.name || 'partner'}`;
           break;
         case 'reject':
-          newStatus = 'Completed'; // Mock rejection
+          newStatus = 'rejected';
+          notificationMessage = `Your waste request has been rejected by ${partner?.name || 'partner'}`;
           break;
         case 'reschedule':
-          // In real app, would open reschedule modal
           alert('Reschedule functionality would open a modal here');
           setUpdating(false);
           return;
@@ -75,26 +168,80 @@ const AssignedWasteRequestsPage: React.FC = () => {
           return;
       }
 
+      setLocalRequests(prev => prev.map(r => r.id === id ? {...r, status: newStatus} : r));
+
       await dbService.updateWasteRequest(id, { status: newStatus });
-      // No need to manually refresh - real-time listener will handle it
+      
+      const request = localRequests.find(r => r.id === id);
+      if (request && (request as any).userId) {
+        await dbService.createNotification({
+          type: 'waste_request',
+          message: notificationMessage,
+          userId: (request as any).userId,
+          status: 'pending'
+        });
+      }
+      
+      alert(`Request ${action === 'accept' ? 'accepted' : 'rejected'} successfully!`);
     } catch (error) {
       console.error('Error updating request:', error);
+      setLocalRequests(requests);
       alert('Failed to update request');
     } finally {
       setUpdating(false);
     }
   };
 
-  const assignedRequests = requests.filter(req => req.status !== 'Completed');
+  const assignedRequests = localRequests
+    .filter(req => {
+      const status = (req.status || '').toLowerCase();
+      return status !== 'rejected' && status !== 'completed';
+    })
+    .sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  // Map wasteType to type for compatibility
+  const mappedRequests = assignedRequests.map(req => ({
+    ...req,
+    type: req.type || (req as any).wasteType || 'Unknown',
+    quantity: req.quantity || `${(req as any).itemCount || 0} items`
+  }));
+
+  // Debug: Log filtering info
+  console.log('🔍 WASTE REQUEST FILTER DEBUG:', {
+    totalRequests: requests.length,
+    partnerSupportedTypes: partner?.supportedWasteTypes,
+    requestTypes: requests.map(r => ({ 
+      type: r.type, 
+      wasteType: (r as any).wasteType,
+      status: r.status, 
+      hasType: !!(r.type || (r as any).wasteType)
+    })),
+    filteredCount: mappedRequests.length,
+    note: 'Supporting both type and wasteType fields'
+  });
+
+  const rejectedRequests = localRequests
+    .filter(req => (req.status || '').toLowerCase() === 'rejected')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div className="space-y-8">
       <div className="bg-gradient-to-r from-emerald-600 via-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-2xl">
-        <h1 className="text-3xl font-bold mb-2">Assigned Waste Requests (Real-time)</h1>
-        <p className="text-emerald-100 text-lg flex items-center">
-          <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
-          Manage your waste collection assignments
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Assigned Waste Requests</h1>
+            <p className="text-emerald-100 text-lg flex items-center">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+              Pathway Real-time Streaming Active
+            </p>
+          </div>
+          <div className="bg-white/20 px-4 py-2 rounded-lg">
+            <div className="text-xs text-emerald-100">Stream Updates</div>
+            <div className="text-2xl font-bold">{updateCount}</div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden">
@@ -111,36 +258,34 @@ const AssignedWasteRequestsPage: React.FC = () => {
               </div>
               <h3 className="mt-2 text-xl font-semibold text-gray-900">No active requests</h3>
               <p className="mt-1 text-gray-600">No waste requests have been assigned to you yet.</p>
-              <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Debug Info:</strong><br/>
-                  Total requests loaded: {requests.length}<br/>
-                  Requests after filtering: {assignedRequests.length}<br/>
-                  {requests.length > 0 && (
-                    <span>Available requests: {requests.map(r => `${r.id} (partnerId: ${r.partnerId || 'none'})`).join(', ')}</span>
-                  )}
-                </p>
-              </div>
             </div>
           ) : (
             <div className="space-y-6">
-              {assignedRequests.map((request) => (
+              {mappedRequests.map((request) => (
                 <div key={request.id} className="border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300 bg-gradient-to-r from-white to-gray-50">
                   <div className="flex items-start space-x-6">
                     <img
-                      src={request.image}
+                      src={(request as any).imageUrl || request.image}
                       alt="Waste"
                       className="w-24 h-24 rounded-2xl object-cover shadow-lg flex-shrink-0"
+                      style={{ width: '96px', height: '96px', objectFit: 'cover', border: '2px solid #e5e7eb' }}
+                      onError={(e) => {
+                        console.error('❌ Image failed to load:', (request as any).imageUrl || request.image);
+                        console.log('Full request data:', request);
+                        e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="96" height="96"%3E%3Crect fill="%23ddd" width="96" height="96"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%23999"%3ENo Image%3C/text%3E%3C/svg%3E';
+                        e.currentTarget.onerror = null;
+                      }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-2xl font-bold text-gray-900">{request.type}</h3>
+                        <h3 className="text-2xl font-bold text-gray-900">{request.type || 'Type Not Set'}</h3>
                         <span className={`inline-flex px-4 py-2 text-sm font-bold rounded-full shadow-md ${
-                          request.status === 'Assigned' ? 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800' :
-                          request.status === 'Accepted' ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800' :
-                          'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
+                          request.status === 'Assigned' || request.status === 'Requested' ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800' :
+                          request.status === 'pending' ? 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800' :
+                          request.status === 'accepted' ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800' :
+                          'bg-gradient-to-r from-red-100 to-red-200 text-red-800'
                         }`}>
-                          {request.status}
+                          {request.status === 'Requested' ? 'Assigned' : request.status}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-6 text-sm text-gray-600 mb-6">
@@ -148,14 +293,30 @@ const AssignedWasteRequestsPage: React.FC = () => {
                           <span className="font-bold text-gray-900">Quantity:</span> <span className="text-lg">{request.quantity}</span>
                         </div>
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                          <span className="font-bold text-gray-900">Location:</span> <span className="text-lg">{request.location}</span>
+                          <span className="font-bold text-gray-900">User:</span> <span className="text-lg">{(request as any).userName || (request as any).userId?.substring(0, 8) || 'User'}</span>
+                        </div>
+                        <div className="col-span-2 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                          <span className="font-bold text-gray-900">Address:</span> 
+                          <span className="text-sm ml-2">
+                            {typeof request.location === 'string' 
+                              ? request.location 
+                              : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ')
+                            }
+                          </span>
                         </div>
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                          <span className="font-bold text-gray-900">Confidence:</span> <span className="text-lg text-emerald-600 font-semibold">{request.confidence}%</span>
+                          <span className="font-bold text-gray-900">Phone:</span> <span className="text-lg text-emerald-600 font-semibold">{request.phoneNumber || (request as any).userPhone || 'N/A'}</span>
                         </div>
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                           <span className="font-bold text-gray-900">Date:</span> <span className="text-lg">{new Date(request.date).toLocaleDateString()}</span>
                         </div>
+                        {request.scheduledDate && request.scheduledTime && (
+                          <div className="col-span-2 bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200">
+                            <span className="font-bold text-emerald-900">Scheduled:</span> 
+                            <span className="text-lg ml-2">{new Date(request.scheduledDate).toLocaleDateString()} at {request.scheduledTime}</span>
+                            <span className="ml-2 text-sm text-emerald-700">({request.scheduleMethod === 'pickup' ? '🚚 Pickup' : '📍 Drop-off'})</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex space-x-3">
                         <button 
@@ -176,34 +337,48 @@ const AssignedWasteRequestsPage: React.FC = () => {
                           </svg>
                           View Photo
                         </button>
-                        {request.status === 'Assigned' && (
-                          <>
-                            <button
-                              onClick={() => handleAction(request.id, 'accept')}
-                              className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
-                            >
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => handleAction(request.id, 'reject')}
-                              className="inline-flex items-center px-6 py-3 border-2 border-gray-300 text-sm font-bold rounded-xl text-gray-700 bg-white hover:border-red-500 hover:text-red-600 hover:bg-red-50 transform hover:scale-105 transition-all duration-300"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              onClick={() => handleAction(request.id, 'reschedule')}
-                              className="inline-flex items-center px-6 py-3 border-2 border-gray-300 text-sm font-bold rounded-xl text-gray-700 bg-white hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transform hover:scale-105 transition-all duration-300"
-                            >
-                              Reschedule
-                            </button>
-                          </>
+                        {(() => {
+                          const statusLower = request.status?.toLowerCase();
+                          const showButtons = statusLower === 'pending' || statusLower === 'assigned' || statusLower === 'requested';
+                          console.log('🔍 BUTTON DEBUG:', {
+                            requestId: request.id,
+                            originalStatus: request.status,
+                            statusLower,
+                            showButtons,
+                            partnerId: request.partnerId,
+                            currentPartner: user?.uid
+                          });
+                          return showButtons ? (
+                            <>
+                              <button
+                                onClick={() => handleAction(request.id, 'accept')}
+                                className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                onClick={() => handleAction(request.id, 'reject')}
+                                className="inline-flex items-center px-6 py-3 border-2 border-gray-300 text-sm font-bold rounded-xl text-gray-700 bg-white hover:border-red-500 hover:text-red-600 hover:bg-red-50 transform hover:scale-105 transition-all duration-300"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : null;
+                        })()}
+                        {request.status === 'accepted' && (
+                          <button
+                            onClick={() => handleSchedulePickup(request.id)}
+                            className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                          >
+                            Schedule Pickup
+                          </button>
                         )}
-                        {(request.status === 'Accepted' || request.status === 'In Progress') && (
+                        {request.status === 'accepted' && (
                           <button
                             onClick={() => handleUpdateStatus(request.id)}
                             className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
                           >
-                            Update Status
+                            Mark Complete
                           </button>
                         )}
                       </div>
@@ -215,6 +390,46 @@ const AssignedWasteRequestsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Rejected Requests Section */}
+      {rejectedRequests.length > 0 && (
+        <div className="bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-red-50 to-pink-50">
+            <h2 className="text-xl font-bold text-gray-900">Rejected Requests</h2>
+            <p className="text-sm text-gray-600 mt-1">Requests you have declined</p>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              {rejectedRequests.map((request) => (
+                <div key={request.id} className="border border-red-200 rounded-xl p-4 bg-red-50">
+                  <div className="flex items-center space-x-4">
+                    <img
+                      src={(request as any).imageUrl || request.image}
+                      alt="Waste"
+                      className="w-16 h-16 rounded-lg object-cover opacity-75"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">{request.type}</h3>
+                        <span className="inline-flex px-3 py-1 text-sm font-bold rounded-full bg-red-100 text-red-800">
+                          Rejected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mt-2">
+                        <div><span className="font-medium">Quantity:</span> {request.quantity}</div>
+                        <div><span className="font-medium">Location:</span> {typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ')}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        Rejected on {new Date(request.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Details Modal */}
       {showDetailsModal && selectedRequest && (
@@ -234,9 +449,10 @@ const AssignedWasteRequestsPage: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center space-x-4">
                   <img
-                    src={selectedRequest.image}
+                    src={(selectedRequest as any).imageUrl || selectedRequest.image}
                     alt="Waste"
                     className="w-20 h-20 rounded-xl object-cover shadow-lg"
+                    style={{ width: '80px', height: '80px', objectFit: 'cover' }}
                   />
                   <div>
                     <h4 className="text-xl font-semibold text-gray-900">{selectedRequest.type}</h4>
@@ -251,19 +467,21 @@ const AssignedWasteRequestsPage: React.FC = () => {
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h5 className="font-semibold text-gray-900 mb-2">Location</h5>
-                    <p className="text-gray-700">{selectedRequest.location}</p>
+                    <p className="text-gray-700">{typeof selectedRequest.location === 'string' ? selectedRequest.location : [selectedRequest.location?.house, selectedRequest.location?.street, selectedRequest.location?.city, selectedRequest.location?.pincode].filter(Boolean).join(', ')}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h5 className="font-semibold text-gray-900 mb-2">AI Confidence</h5>
-                    <p className="text-emerald-600 font-semibold">{selectedRequest.confidence}%</p>
+                    <h5 className="font-semibold text-gray-900 mb-2">Phone Number</h5>
+                    <p className="text-emerald-600 font-semibold">{selectedRequest.phoneNumber || (selectedRequest as any).userPhone || 'N/A'}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h5 className="font-semibold text-gray-900 mb-2">Status</h5>
                     <span className={`inline-flex px-3 py-1 text-sm font-bold rounded-full ${
-                      selectedRequest.status === 'Assigned' ? 'bg-gray-100 text-gray-800' :
-                      selectedRequest.status === 'Accepted' ? 'bg-blue-100 text-blue-800' :
-                      selectedRequest.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
+                      selectedRequest.status === 'Assigned' || selectedRequest.status === 'Requested' ? 'bg-yellow-100 text-yellow-800' :
+                      selectedRequest.status === 'pending' ? 'bg-gray-100 text-gray-800' :
+                      selectedRequest.status === 'accepted' ? 'bg-blue-100 text-blue-800' :
+                      selectedRequest.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                      selectedRequest.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
                     }`}>
                       {selectedRequest.status}
                     </span>
@@ -285,8 +503,8 @@ const AssignedWasteRequestsPage: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h5 className="font-semibold text-gray-900 mb-2">Description</h5>
                   <p className="text-gray-700">
-                    {selectedRequest.type} waste collection request at {selectedRequest.location}.
-                    AI classification confidence: {selectedRequest.confidence}%.
+                    {selectedRequest.type} waste collection request at {typeof selectedRequest.location === 'string' ? selectedRequest.location : [selectedRequest.location?.house, selectedRequest.location?.street, selectedRequest.location?.city, selectedRequest.location?.pincode].filter(Boolean).join(', ')}.
+                    Contact: {selectedRequest.phoneNumber || 'N/A'}.
                     Quantity: {selectedRequest.quantity}.
                   </p>
                 </div>
@@ -324,14 +542,19 @@ const AssignedWasteRequestsPage: React.FC = () => {
               </svg>
             </button>
             <img
-              src={selectedRequest.image}
+              src={(selectedRequest as any).imageUrl || selectedRequest.image}
               alt={`${selectedRequest.type} waste`}
               className="w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              style={{ maxHeight: '80vh', objectFit: 'contain' }}
+              onError={(e) => {
+                console.error('❌ Photo modal image failed:', (selectedRequest as any).imageUrl || selectedRequest.image);
+                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23ddd" width="800" height="600"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="%23999"%3EImage Not Available%3C/text%3E%3C/svg%3E';
+              }}
             />
             <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white p-4 rounded-lg">
               <h4 className="font-semibold text-lg">{selectedRequest.type}</h4>
-              <p className="text-sm opacity-90">Location: {selectedRequest.location}</p>
-              <p className="text-sm opacity-90">AI Confidence: {selectedRequest.confidence}%</p>
+              <p className="text-sm opacity-90">Location: {typeof selectedRequest.location === 'string' ? selectedRequest.location : [selectedRequest.location?.house, selectedRequest.location?.street, selectedRequest.location?.city, selectedRequest.location?.pincode].filter(Boolean).join(', ')}</p>
+              <p className="text-sm opacity-90">Phone: {selectedRequest.phoneNumber || (selectedRequest as any).userPhone || 'N/A'}</p>
             </div>
           </div>
         </div>
@@ -358,35 +581,38 @@ const AssignedWasteRequestsPage: React.FC = () => {
               <p className="text-gray-600 mb-6">Select the new status for this waste request:</p>
 
               <div className="space-y-3">
+                <p className="text-sm text-gray-600 mb-4">Mark this request as completed:</p>
                 <button
-                  onClick={() => handleStatusChange('Assigned')}
-                  className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-200 flex items-center justify-between"
-                >
-                  <span className="font-medium text-gray-900">Assigned</span>
-                  <span className="text-sm text-gray-500">Request has been assigned to partner</span>
-                </button>
-
-                <button
-                  onClick={() => handleStatusChange('Accepted')}
-                  className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 flex items-center justify-between"
-                >
-                  <span className="font-medium text-blue-900">Accepted</span>
-                  <span className="text-sm text-blue-600">Partner has accepted the request</span>
-                </button>
-
-                <button
-                  onClick={() => handleStatusChange('In Progress')}
-                  className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-yellow-300 hover:bg-yellow-50 transition-all duration-200 flex items-center justify-between"
-                >
-                  <span className="font-medium text-yellow-900">In Progress</span>
-                  <span className="text-sm text-yellow-600">Collection is currently in progress</span>
-                </button>
-
-                <button
-                  onClick={() => handleStatusChange('Completed')}
+                  onClick={async () => {
+                    if (!requestToUpdate) return;
+                    try {
+                      const request = localRequests.find(r => r.id === requestToUpdate);
+                      
+                      setLocalRequests(prev => prev.map(r => r.id === requestToUpdate ? {...r, status: 'Completed'} : r));
+                      setShowStatusModal(false);
+                      setRequestToUpdate(null);
+                      
+                      await dbService.updateWasteRequest(requestToUpdate, { status: 'Completed' });
+                      
+                      if (request && (request as any).userId) {
+                        await dbService.createNotification({
+                          type: 'waste_request',
+                          message: `Your waste request has been completed by ${partner?.name || 'partner'}. Thank you!`,
+                          userId: (request as any).userId,
+                          status: 'pending'
+                        });
+                      }
+                      
+                      alert('✅ Request marked as completed!');
+                    } catch (error) {
+                      console.error('❌ Error marking as completed:', error);
+                      setLocalRequests(requests);
+                      alert('Failed to update status');
+                    }
+                  }}
                   className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-all duration-200 flex items-center justify-between"
                 >
-                  <span className="font-medium text-green-900">Completed</span>
+                  <span className="font-medium text-green-900">Mark as Completed</span>
                   <span className="text-sm text-green-600">Waste collection has been completed</span>
                 </button>
               </div>
@@ -406,7 +632,111 @@ const AssignedWasteRequestsPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Schedule Pickup Modal */}
+      {showScheduleModal && requestToSchedule && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-900">Schedule Collection</h3>
+                <button
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setRequestToSchedule(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <ScheduleForm onSubmit={handleScheduleSubmit} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+};
+
+const ScheduleForm: React.FC<{ onSubmit: (data: { method: 'pickup' | 'dropoff'; date: string; time: string }) => void }> = ({ onSubmit }) => {
+  const [method, setMethod] = useState<'pickup' | 'dropoff'>('pickup');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!date || !time) {
+      alert('Please select date and time');
+      return;
+    }
+    onSubmit({ method, date, time });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-3">Collection Method</label>
+        <div className="space-y-3">
+          <label className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input
+              type="radio"
+              value="pickup"
+              checked={method === 'pickup'}
+              onChange={(e) => setMethod(e.target.value as 'pickup')}
+              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="ml-3 text-sm font-medium text-gray-700">🚚 Pickup from Location</span>
+          </label>
+          <label className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input
+              type="radio"
+              value="dropoff"
+              checked={method === 'dropoff'}
+              onChange={(e) => setMethod(e.target.value as 'dropoff')}
+              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="ml-3 text-sm font-medium text-gray-700">📍 Drop-off at Center</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-2">Date</label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          min={new Date().toISOString().split('T')[0]}
+          className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-2">Time</label>
+        <select
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          required
+        >
+          <option value="">Select Time</option>
+          <option value="09:00-11:00">9:00 AM - 11:00 AM</option>
+          <option value="11:00-13:00">11:00 AM - 1:00 PM</option>
+          <option value="13:00-15:00">1:00 PM - 3:00 PM</option>
+          <option value="15:00-17:00">3:00 PM - 5:00 PM</option>
+          <option value="17:00-19:00">5:00 PM - 7:00 PM</option>
+        </select>
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold rounded-xl hover:from-emerald-700 hover:to-green-700 transition-all duration-300"
+      >
+        Schedule Collection
+      </button>
+    </form>
   );
 };
 

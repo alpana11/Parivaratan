@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { dbService } from '../services/dbService';
-import { Voucher, VoucherAssignment, Partner } from '../types';
+import { Voucher, Partner, RewardTransaction } from '../types';
 
 const AdminVouchersPage: React.FC = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [assignments, setAssignments] = useState<VoucherAssignment[]>([]);
+  const [transactions, setTransactions] = useState<RewardTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showRedemptionsModal, setShowRedemptionsModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [filter, setFilter] = useState<'all' | 'available' | 'redeemed' | 'expired' | 'inactive'>('all');
 
@@ -18,37 +18,34 @@ const AdminVouchersPage: React.FC = () => {
     description: '',
     pointsRequired: 0,
     category: '',
-    expiryDate: '',
     maxRedemptions: 0
   });
 
   const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
 
   useEffect(() => {
-    loadData();
+    const unsubscribeVouchers = dbService.listenToVouchers((vouchersData) => {
+      setVouchers(vouchersData);
+      setLoading(false);
+    });
+
+    const unsubscribePartners = dbService.subscribeToPartners((partnersData) => {
+      setPartners(partnersData);
+    });
+
+    const unsubscribeTransactions = dbService.subscribeToRewardTransactions((transactionsData) => {
+      setTransactions(transactionsData);
+    });
+
+    return () => {
+      unsubscribeVouchers();
+      unsubscribePartners();
+      unsubscribeTransactions();
+    };
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [vouchersData, partnersData, assignmentsData] = await Promise.all([
-        dbService.getVouchers(),
-        dbService.getAllPartners(),
-        // Mock assignments data - in real app, this would come from database
-        Promise.resolve([] as VoucherAssignment[])
-      ]);
-
-      setVouchers(vouchersData);
-      setPartners(partnersData);
-      setAssignments(assignmentsData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreateVoucher = async () => {
-    if (!newVoucher.title || !newVoucher.pointsRequired || !newVoucher.expiryDate) {
+    if (!newVoucher.title || !newVoucher.pointsRequired) {
       alert('Please fill in all required fields');
       return;
     }
@@ -57,10 +54,9 @@ const AdminVouchersPage: React.FC = () => {
       title: newVoucher.title,
       description: newVoucher.description,
       pointsRequired: newVoucher.pointsRequired,
-      image: '/voucher-placeholder.png', // Default image
+      image: '/voucher-placeholder.png',
       category: newVoucher.category,
       status: 'available',
-      expiryDate: new Date(newVoucher.expiryDate).toISOString(),
       createdAt: new Date().toISOString(),
       currentRedemptions: 0
     };
@@ -74,18 +70,14 @@ const AdminVouchersPage: React.FC = () => {
 
     try {
       await dbService.createVoucher(voucher);
-      setVouchers([...vouchers, { ...voucher, id: `temp-${Date.now()}` }]); // Temporary until reload
       setShowCreateModal(false);
       setNewVoucher({
         title: '',
         description: '',
         pointsRequired: 0,
         category: '',
-        expiryDate: '',
         maxRedemptions: 0
       });
-      // Reload data to get the actual ID
-      loadData();
     } catch (error) {
       console.error('Error creating voucher:', error);
       alert('Failed to create voucher. Please try again.');
@@ -100,83 +92,41 @@ const AdminVouchersPage: React.FC = () => {
 
     try {
       await dbService.updateVoucher(voucherId, { status: newStatus });
-      setVouchers(vouchers.map(v =>
-        v.id === voucherId
-          ? { ...v, status: newStatus }
-          : v
-      ));
     } catch (error) {
       console.error('Error updating voucher status:', error);
       alert('Failed to update voucher status. Please try again.');
     }
   };
 
-  const handleAssignVouchers = async () => {
-    if (!selectedVoucher || selectedPartners.length === 0) {
-      alert('Please select a voucher and partners');
-      return;
-    }
-
-    try {
-      // Update voucher with assigned partners
-      const currentAssigned = selectedVoucher.assignedPartners || [];
-      const newAssigned = [...new Set([...currentAssigned, ...selectedPartners])];
-
-      await dbService.updateVoucher(selectedVoucher.id, {
-        assignedPartners: newAssigned
-      });
-
-      // Update local state
-      setVouchers(vouchers.map(v =>
-        v.id === selectedVoucher.id
-          ? {
-              ...v,
-              assignedPartners: newAssigned
-            }
-          : v
-      ));
-
-      setShowAssignModal(false);
-      setSelectedVoucher(null);
-      setSelectedPartners([]);
-    } catch (error) {
-      console.error('Error assigning vouchers:', error);
-      alert('Failed to assign vouchers. Please try again.');
-    }
-  };
-
-  const getVoucherStats = () => {
+  const stats = useMemo(() => {
+    const now = new Date();
     const total = vouchers.length;
     const available = vouchers.filter(v => v.status === 'available').length;
     const redeemed = vouchers.filter(v => v.status === 'redeemed').length;
-    const expired = vouchers.filter(v => new Date(v.expiryDate) < new Date() && v.status !== 'redeemed').length;
+    const expired = vouchers.filter(v => new Date(v.expiryDate) < now && v.status !== 'redeemed').length;
     const inactive = vouchers.filter(v => v.status === 'inactive').length;
 
     return { total, available, redeemed, expired, inactive };
-  };
+  }, [vouchers]);
 
-  const getBudgetInfo = () => {
-    // Mock subscription revenue calculation
-    const activeSubscriptions = partners.filter(p =>
-      p.subscription?.status === 'active'
-    ).length;
-
-    const monthlyRevenue = activeSubscriptions * 99; // Assuming ₹99/month
-    const voucherBudget = Math.floor(monthlyRevenue * 0.1); // 10% of revenue for vouchers
+  const budget = useMemo(() => {
+    const activePartners = partners.filter(p => p.subscription?.status === 'active');
+    const monthlyRevenue = activePartners.reduce((sum, p) => sum + (p.subscription?.amount || 0), 0);
+    const voucherBudget = Math.floor(monthlyRevenue * 0.1);
 
     return { monthlyRevenue, voucherBudget };
-  };
+  }, [partners]);
 
-  const filteredVouchers = vouchers.filter(voucher => {
-    if (filter === 'all') return true;
-    if (filter === 'expired') {
-      return new Date(voucher.expiryDate) < new Date() && voucher.status !== 'redeemed';
-    }
-    return voucher.status === filter;
-  });
-
-  const stats = getVoucherStats();
-  const budget = getBudgetInfo();
+  const filteredVouchers = useMemo(() => {
+    const now = new Date();
+    return vouchers.filter(voucher => {
+      if (filter === 'all') return true;
+      if (filter === 'expired') {
+        return new Date(voucher.expiryDate) < now && voucher.status !== 'redeemed';
+      }
+      return voucher.status === filter;
+    });
+  }, [vouchers, filter]);
 
   if (loading) {
     return (
@@ -193,52 +143,17 @@ const AdminVouchersPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">🎫 Voucher Management</h2>
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               + Create Voucher
             </button>
-            <button
-              onClick={() => setShowAssignModal(true)}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-            >
-              Assign Vouchers
-            </button>
-          </div>
-        </div>
-
-        {/* Budget Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Monthly Revenue</p>
-                <p className="text-2xl font-bold text-green-600">₹{budget.monthlyRevenue}</p>
-              </div>
-              <div className="text-green-500 text-2xl">💰</div>
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Voucher Budget</p>
-                <p className="text-2xl font-bold text-blue-600">₹{budget.voucherBudget}</p>
-              </div>
-              <div className="text-blue-500 text-2xl">🎫</div>
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Budget Utilized</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {budget.voucherBudget > 0 ? Math.round((stats.redeemed * 50) / budget.voucherBudget * 100) : 0}%
-                </p>
-              </div>
-              <div className="text-purple-500 text-2xl">📊</div>
-            </div>
           </div>
         </div>
 
@@ -305,8 +220,7 @@ const AdminVouchersPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredVouchers.map((voucher) => {
             const isExpired = new Date(voucher.expiryDate) < new Date() && voucher.status !== 'redeemed';
-            const assignedCount = voucher.assignedPartners?.length || 0;
-            const redeemedCount = voucher.redeemedBy?.length || 0;
+            const redeemedCount = voucher.currentRedemptions || 0;
 
             return (
               <div key={voucher.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -339,19 +253,18 @@ const AdminVouchersPage: React.FC = () => {
                       <span className="text-gray-600">Points Required:</span>
                       <span className="font-semibold text-orange-600">{voucher.pointsRequired}</span>
                     </div>
+
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Expires:</span>
-                      <span className={`font-semibold ${isExpired ? 'text-red-600' : 'text-gray-900'}`}>
-                        {new Date(voucher.expiryDate).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Assigned:</span>
-                      <span className="font-semibold text-blue-600">{assignedCount}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Redeemed:</span>
-                      <span className="font-semibold text-green-600">{redeemedCount}</span>
+                      <span className="text-gray-600">Times Redeemed:</span>
+                      <button
+                        onClick={() => {
+                          setSelectedVoucher(voucher);
+                          setShowRedemptionsModal(true);
+                        }}
+                        className="font-semibold text-green-600 hover:underline"
+                      >
+                        {redeemedCount}
+                      </button>
                     </div>
                     {voucher.maxRedemptions && (
                       <div className="flex justify-between text-sm">
@@ -361,27 +274,16 @@ const AdminVouchersPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleToggleVoucherStatus(voucher.id)}
-                      className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
-                        voucher.status === 'available'
-                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                          : 'bg-green-100 text-green-700 hover:bg-green-200'
-                      }`}
-                    >
-                      {voucher.status === 'available' ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedVoucher(voucher);
-                        setShowAssignModal(true);
-                      }}
-                      className="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                    >
-                      Assign
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleToggleVoucherStatus(voucher.id)}
+                    className={`w-full px-3 py-2 text-sm rounded-lg transition-colors ${
+                      voucher.status === 'available'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    }`}
+                  >
+                    {voucher.status === 'available' ? 'Deactivate' : 'Activate'}
+                  </button>
                 </div>
               </div>
             );
@@ -452,15 +354,7 @@ const AdminVouchersPage: React.FC = () => {
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date *</label>
-                    <input
-                      type="date"
-                      value={newVoucher.expiryDate}
-                      onChange={(e) => setNewVoucher({ ...newVoucher, expiryDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Max Redemptions (optional)</label>
                     <input
@@ -491,104 +385,62 @@ const AdminVouchersPage: React.FC = () => {
           </div>
         )}
 
-        {/* Assign Voucher Modal */}
-        {showAssignModal && (
+        {/* Redemptions Modal */}
+        {showRedemptionsModal && selectedVoucher && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-gray-900">Assign Vouchers to Partners</h3>
+            <div className="bg-white rounded-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-gray-900">Voucher Redemptions</h3>
                   <button
-                    onClick={() => setShowAssignModal(false)}
+                    onClick={() => {
+                      setShowRedemptionsModal(false);
+                      setSelectedVoucher(null);
+                    }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     ✕
                   </button>
                 </div>
-
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Voucher</label>
-                  <select
-                    value={selectedVoucher?.id || ''}
-                    onChange={(e) => {
-                      const voucher = vouchers.find(v => v.id === e.target.value);
-                      setSelectedVoucher(voucher || null);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Choose a voucher...</option>
-                    {vouchers.filter(v => v.status === 'available').map((voucher) => (
-                      <option key={voucher.id} value={voucher.id}>
-                        {voucher.title} ({voucher.pointsRequired} points)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedVoucher && (
-                  <div className="mb-6">
-                    <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                      <h4 className="font-semibold text-blue-900">{selectedVoucher.title}</h4>
-                      <p className="text-sm text-blue-700">{selectedVoucher.description}</p>
-                      <p className="text-sm text-blue-600 mt-1">
-                        Points Required: {selectedVoucher.pointsRequired} |
-                        Expires: {new Date(selectedVoucher.expiryDate).toLocaleDateString()}
-                      </p>
-                    </div>
-
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Partners</label>
-                    <div className="max-h-60 overflow-y-auto border border-gray-300 rounded-lg">
-                      {partners
-                        .filter(p => p.subscription?.status === 'active') // Only show partners with active subscriptions
-                        .map((partner) => (
-                        <div key={partner.id} className="flex items-center p-3 border-b border-gray-200 last:border-b-0">
-                          <input
-                            type="checkbox"
-                            id={`partner-${partner.id}`}
-                            checked={selectedPartners.includes(partner.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedPartners([...selectedPartners, partner.id]);
-                              } else {
-                                setSelectedPartners(selectedPartners.filter(id => id !== partner.id));
-                              }
-                            }}
-                            className="mr-3"
-                          />
-                          <label htmlFor={`partner-${partner.id}`} className="flex-1 cursor-pointer">
-                            <div className="font-medium text-gray-900">{partner.name}</div>
-                            <div className="text-sm text-gray-600">
-                              {partner.organization} | {partner.rewardPoints} points available
+                <p className="text-sm text-gray-600 mt-2">{selectedVoucher.title}</p>
+              </div>
+              <div className="p-6 overflow-y-auto">
+                {transactions
+                  .filter(t => t.type === 'redeemed' && t.voucherId === selectedVoucher.id)
+                  .length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No redemptions yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {transactions
+                      .filter(t => t.type === 'redeemed' && t.voucherId === selectedVoucher.id)
+                      .map((transaction) => {
+                        const partner = partners.find(p => p.id === transaction.partnerId);
+                        return (
+                          <div key={transaction.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  {partner?.name || (partner as any)?.userName || (partner as any)?.fullName || 'Unknown User'}
+                                </p>
+                                <p className="text-sm text-gray-600">{partner?.email || 'N/A'}</p>
+                                <p className="text-sm text-gray-500 mt-1">
+                                  {partner?.phone || (partner as any)?.userPhone || 'N/A'}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-orange-600">-{transaction.points} pts</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {new Date(transaction.date).toLocaleDateString()}
+                                </p>
+                              </div>
                             </div>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Only partners with active subscriptions are shown
-                    </p>
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
-
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => setShowAssignModal(false)}
-                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAssignVouchers}
-                    disabled={!selectedVoucher || selectedPartners.length === 0}
-                    className={`px-4 py-2 rounded-lg transition-colors ${
-                      selectedVoucher && selectedPartners.length > 0
-                        ? 'bg-green-500 text-white hover:bg-green-600'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    Assign to {selectedPartners.length} Partner{selectedPartners.length !== 1 ? 's' : ''}
-                  </button>
-                </div>
               </div>
             </div>
           </div>

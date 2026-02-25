@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
@@ -7,16 +7,14 @@ const AdminDashboard: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!admin) {
-      navigate('/admin/login');
-    }
-  }, [admin, navigate]);
-
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate('/admin/login');
+      navigate('/', { replace: true });
+      window.history.pushState(null, '', '/');
+      window.addEventListener('popstate', () => {
+        window.history.pushState(null, '', '/');
+      });
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -29,7 +27,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-gradient-to-r from-white to-gray-50 shadow-lg border-b border-gray-200">
+      <header className="bg-gradient-to-r from-white to-gray-50 shadow-lg border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
@@ -69,12 +67,12 @@ const AdminDashboard: React.FC = () => {
 
       <div className="flex">
         {/* Sidebar */}
-        <nav className="w-64 bg-white shadow-lg min-h-screen border-r border-gray-200">
+        <nav className="w-64 flex-shrink-0 bg-white shadow-lg h-screen sticky top-0 border-r border-gray-200 overflow-y-auto">
           <div className="p-6">
             <div className="mb-8">
               {/* Title moved to header */}
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-2 pb-6">
               <li>
                 <Link
                   to="/admin/dashboard"
@@ -87,6 +85,22 @@ const AdminDashboard: React.FC = () => {
                   <span className="text-lg mr-3">📊</span>
                   <span>Dashboard Overview</span>
                   {isActiveRoute('/admin/dashboard') && (
+                    <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
+                  )}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/admin/users"
+                  className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                    isActiveRoute('/admin/users')
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
+                      : 'text-gray-700 hover:bg-gray-100 hover:shadow-md'
+                  }`}
+                >
+                  <span className="text-lg mr-3">👥</span>
+                  <span>Users Management</span>
+                  {isActiveRoute('/admin/users') && (
                     <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
                   )}
                 </Link>
@@ -235,28 +249,13 @@ const AdminDashboard: React.FC = () => {
                   )}
                 </Link>
               </li>
-              <li>
-                <Link
-                  to="/admin/audit"
-                  className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
-                    isActiveRoute('/admin/audit')
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
-                      : 'text-gray-700 hover:bg-gray-100 hover:shadow-md'
-                  }`}
-                >
-                  <span className="text-lg mr-3">📋</span>
-                  <span>Audit Logs</span>
-                  {isActiveRoute('/admin/audit') && (
-                    <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
-                  )}
-                </Link>
-              </li>
+
             </ul>
           </div>
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 p-8">
+        <main className="flex-1 overflow-x-hidden px-8 pt-8 pb-8">
           <Outlet />
         </main>
       </div>

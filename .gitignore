@@ -16,3 +16,6 @@ temp_file.tsx
 AzureAIDemo.tsx
 AzureAIDemoPage.tsx
 azureCognitive.ts
+node_modules/
+dist/
+.env.*

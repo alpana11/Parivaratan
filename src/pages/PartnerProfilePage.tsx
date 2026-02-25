@@ -3,9 +3,11 @@ import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { useWasteRequests } from '../hooks/useData';
 
 const PartnerProfilePage: React.FC = () => {
   const { partner, user, loading, signOut } = useAuth();
+  const { streamActive, updateCount } = useWasteRequests();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
     id: '',
@@ -205,8 +207,18 @@ const PartnerProfilePage: React.FC = () => {
   return (
     <div className="space-y-8">
       <div className="bg-gradient-to-r from-emerald-600 via-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-2xl">
-        <h1 className="text-3xl font-bold mb-2">Partner Profile</h1>
-        <p className="text-emerald-100 text-lg">Manage your account information and preferences</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Partner Profile</h1>
+            <p className="text-emerald-100 text-lg">Manage your account information and preferences</p>
+          </div>
+          {streamActive && (
+            <div className="flex items-center space-x-2 bg-white/20 px-4 py-2 rounded-lg">
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+              <span className="text-sm">Pathway Live • {updateCount}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white shadow-2xl rounded-2xl border border-gray-100">
@@ -277,7 +289,7 @@ const PartnerProfilePage: React.FC = () => {
             <textarea
               name="address"
               rows={3}
-              value={profile.address}
+              value={typeof profile.address === 'string' ? profile.address : JSON.stringify(profile.address, null, 2)}
               onChange={handleChange}
               disabled={!isEditing}
               className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 bg-white disabled:bg-gray-100 disabled:text-gray-500 shadow-sm resize-none"
@@ -324,26 +336,44 @@ const PartnerProfilePage: React.FC = () => {
             <h3 className="text-lg font-bold text-gray-900 mb-4">Uploaded Documents</h3>
             <div className="space-y-4">
               {profile.documents && profile.documents.length > 0 ? (
-                profile.documents.map((doc, index) => (
-                  <div key={index} className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg className="w-6 h-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="text-gray-900 font-medium">
-                        {typeof doc === 'string' ? doc : doc.name || doc.type || 'Document'}
-                      </span>
+                profile.documents.map((doc, index) => {
+                  const docUrl = typeof doc === 'string' ? doc : doc.url;
+                  const docName = typeof doc === 'string' ? doc : doc.name || doc.type || 'Document';
+                  return (
+                    <div key={index} className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg className="w-6 h-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-gray-900 font-medium">{docName}</span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${
+                          profile.verificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                          profile.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {profile.verificationStatus === 'approved' ? 'Verified' :
+                           profile.verificationStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                        </span>
+                        {docUrl && (
+                          <a
+                            href={docUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            View
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${
-                      profile.verificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                      profile.verificationStatus === 'rejected' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {profile.verificationStatus === 'approved' ? 'Verified' :
-                       profile.verificationStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200 text-center">
                   <p className="text-gray-500">No documents uploaded yet</p>

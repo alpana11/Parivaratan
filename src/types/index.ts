@@ -21,20 +21,23 @@ export interface PartnerSubscription {
   transactionId?: string;
 }
 
-export type WasteRequestStatus = 'Assigned' | 'Accepted' | 'In Progress' | 'Completed';
+export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected';
 
 export interface WasteRequest {
   id: string;
-  image: string; // URL or path to image
-  type: string; // AI-classified type
-  confidence: number; // 0-100
-  quantity: string; // e.g., "5 kg"
+  userId: string;
+  partnerId: string;
+  image: string;
+  type: string;
+  phoneNumber: string;
+  quantity: string;
   location: string;
   status: WasteRequestStatus;
-  date: string; // ISO date
-  partnerId?: string; // Partner ID assigned to this request
-  assignedPartner?: string; // Partner ID (deprecated, use partnerId)
-  aiRecommendedPartner?: string;
+  createdAt: string;
+  date: string;
+  scheduleMethod?: 'pickup' | 'dropoff';
+  scheduledDate?: string;
+  scheduledTime?: string;
 }
 
 export interface ImpactMetrics {
@@ -86,6 +89,7 @@ export interface Voucher {
   redeemedBy?: string[]; // Partner IDs who redeemed this voucher
   maxRedemptions?: number; // Optional limit on total redemptions
   currentRedemptions?: number;
+  usageDeadline?: string; // 20 days from redemption date
 }
 
 export interface VoucherAssignment {
@@ -126,6 +130,7 @@ export interface RewardTransaction {
   date: string;
   voucherId?: string;
   wasteRequestId?: string; // Link to completed pickup
+  usageDeadline?: string; // 20 days from redemption for vouchers
 }
 
 export interface SubscriptionPlan {

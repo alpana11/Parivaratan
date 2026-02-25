@@ -2,19 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { WasteRequest, Partner } from '../types';
 import { useAdminWasteRequests } from '../hooks/useData';
+import { emailService } from '../services/emailService';
 
 const AdminWasteRequestsPage: React.FC = () => {
   const { requests, loading } = useAdminWasteRequests();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState<WasteRequest | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [scheduledPickups, setScheduledPickups] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'location'>('date');
 
   useEffect(() => {
     loadPartners();
+    
+    const unsubscribeScheduledPickups = dbService.subscribeToAllScheduledPickups((pickups) => {
+      setScheduledPickups(pickups);
+    });
+
+    return () => {
+      unsubscribeScheduledPickups();
+    };
   }, []);
 
   const loadPartners = async () => {
@@ -56,36 +64,19 @@ const AdminWasteRequestsPage: React.FC = () => {
     }
   };
 
-  const handlePartnerAssignment = async (requestId: string, partnerId: string) => {
-    try {
-      await dbService.updateWasteRequest(requestId, { partnerId: partnerId });
-      // No need to manually update state - real-time listener will handle it
-      setShowModal(false);
-    } catch (error) {
-      console.error('Error assigning partner:', error);
-    }
-  };
 
-  const approveAIPartner = async (request: WasteRequest) => {
-    if (request.aiRecommendedPartner) {
-      await handlePartnerAssignment(request.id, request.aiRecommendedPartner);
-    }
-  };
 
   const getStatusColor = (status: WasteRequest['status']) => {
     switch (status) {
-      case 'Assigned': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'In Progress': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 90) return 'text-green-600';
-    if (confidence >= 70) return 'text-yellow-600';
-    return 'text-red-600';
+  const getPhoneNumberDisplay = (phoneNumber?: string) => {
+    return phoneNumber || 'N/A';
   };
 
   const getPartnerName = (partnerId?: string) => {
@@ -94,13 +85,42 @@ const AdminWasteRequestsPage: React.FC = () => {
     return partner ? partner.name : 'Unknown';
   };
 
+  // Combine waste requests and scheduled pickups for display
+  const allRequests = [
+    ...requests,
+    ...scheduledPickups.map(pickup => {
+      // Find the original waste request for this scheduled pickup
+      const originalRequest = requests.find(r => r.id === pickup.requestId);
+      return {
+        ...pickup,
+        status: 'Scheduled',
+        type: pickup.wasteType || originalRequest?.type || 'Scheduled Pickup',
+        quantity: pickup.quantity || originalRequest?.quantity || 'N/A',
+        location: pickup.location || originalRequest?.location || 'N/A',
+        date: pickup.date || pickup.createdAt,
+        image: originalRequest?.image || originalRequest?.imageUrl || (originalRequest as any)?.wasteImage || pickup.image || pickup.wasteImage || pickup.imageUrl,
+        phoneNumber: originalRequest?.phoneNumber || (originalRequest as any)?.userPhone || pickup.phoneNumber || pickup.userPhone,
+        partnerId: pickup.partnerId || originalRequest?.partnerId,
+      };
+    })
+  ];
+
   // Filter and sort requests
-  const filteredRequests = requests
+  const filteredRequests = allRequests
     .filter(request => {
-      const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
+      let matchesStatus = false;
+      if (filterStatus === 'all') {
+        matchesStatus = true;
+      } else if (filterStatus === 'In Progress') {
+        matchesStatus = request.status === 'In Progress' || request.status === 'Scheduled';
+      } else {
+        matchesStatus = request.status === filterStatus;
+      }
+      
+      const locationStr = typeof request.location === 'string' ? request.location : request.location?.city || '';
       const matchesSearch = searchTerm === '' ||
         request.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        request.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        locationStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getPartnerName(request.partnerId).toLowerCase().includes(searchTerm.toLowerCase());
       return matchesStatus && matchesSearch;
     })
@@ -111,7 +131,9 @@ const AdminWasteRequestsPage: React.FC = () => {
         case 'status':
           return a.status.localeCompare(b.status);
         case 'location':
-          return a.location.localeCompare(b.location);
+          const locA = typeof a.location === 'string' ? a.location : a.location?.city || '';
+          const locB = typeof b.location === 'string' ? b.location : b.location?.city || '';
+          return locA.localeCompare(locB);
         default:
           return 0;
       }
@@ -139,8 +161,9 @@ const AdminWasteRequestsPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Waste Requests Management (Real-time)</h2>
-          <div className="text-sm text-gray-500 bg-green-50 px-3 py-1 rounded-full border border-green-200">
-            🔴 Live Updates
+          <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
           </div>
         </div>
 
@@ -164,9 +187,9 @@ const AdminWasteRequestsPage: React.FC = () => {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Status</option>
-                <option value="Assigned">Assigned</option>
-                <option value="Accepted">Accepted</option>
+                <option value="accepted">Accepted</option>
                 <option value="In Progress">In Progress</option>
+                <option value="rejected">Rejected</option>
                 <option value="Completed">Completed</option>
               </select>
             </div>
@@ -192,22 +215,22 @@ const AdminWasteRequestsPage: React.FC = () => {
             <div className="text-sm text-gray-600">Total Requests</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow text-center">
-            <div className="text-2xl font-bold text-yellow-600">
-              {requests.filter(r => r.status === 'Assigned').length}
+            <div className="text-2xl font-bold text-blue-600">
+              {requests.filter(r => r.status === 'accepted').length}
             </div>
-            <div className="text-sm text-gray-600">Pending Assignment</div>
+            <div className="text-sm text-gray-600">Accepted</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {requests.filter(r => r.status === 'In Progress').length}
+            <div className="text-2xl font-bold text-orange-600">
+              {requests.filter(r => r.status === 'In Progress' || r.status === 'Scheduled').length + scheduledPickups.length}
             </div>
             <div className="text-sm text-gray-600">In Progress</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {requests.filter(r => r.status === 'Completed').length}
+            <div className="text-2xl font-bold text-red-600">
+              {requests.filter(r => r.status === 'rejected').length}
             </div>
-            <div className="text-sm text-gray-600">Completed</div>
+            <div className="text-sm text-gray-600">Rejected</div>
           </div>
         </div>
 
@@ -215,7 +238,7 @@ const AdminWasteRequestsPage: React.FC = () => {
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              Showing {filteredRequests.length} of {requests.length} requests
+              Showing {filteredRequests.length} of {allRequests.length} requests
             </h3>
           </div>
           <ul className="divide-y divide-gray-200">
@@ -226,7 +249,7 @@ const AdminWasteRequestsPage: React.FC = () => {
                   <div className="flex-shrink-0">
                     <img
                       className="h-20 w-20 rounded-lg object-cover border"
-                      src={request.image}
+                      src={request.image || (request as any).imageUrl || (request as any).wasteImage}
                       alt="Waste"
                       onError={(e) => {
                         e.currentTarget.src = 'https://via.placeholder.com/80x80?text=No+Image';
@@ -248,15 +271,18 @@ const AdminWasteRequestsPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div>
                         <p className="text-sm text-gray-600">
-                          <span className="font-medium">Location:</span> {request.location}
+                          <span className="font-medium">User Name:</span> {(request as any).userName || (request as any).name || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Location:</span> {typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ')}
                         </p>
                         <p className="text-sm text-gray-600">
                           <span className="font-medium">Date:</span> {new Date(request.date).toLocaleDateString()} at {new Date(request.date).toLocaleTimeString()}
                         </p>
                         <p className="text-sm">
-                          <span className="font-medium text-gray-600">AI Confidence:</span>
-                          <span className={`font-semibold ml-1 ${getConfidenceColor(request.confidence)}`}>
-                            {request.confidence}%
+                          <span className="font-medium text-gray-600">Phone:</span>
+                          <span className="font-semibold ml-1 text-emerald-600">
+                            {request.phoneNumber || (request as any).userPhone || 'N/A'}
                           </span>
                         </p>
                       </div>
@@ -264,55 +290,11 @@ const AdminWasteRequestsPage: React.FC = () => {
                         <p className="text-sm text-gray-600">
                           <span className="font-medium">Assigned Partner:</span> {getPartnerName(request.partnerId)}
                         </p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium">AI Recommended:</span> {getPartnerName(request.aiRecommendedPartner)}
-                        </p>
-                        {request.aiRecommendedPartner && request.partnerId !== request.aiRecommendedPartner && (
-                          <p className="text-sm text-orange-600 font-medium">
-                            ⚠️ Different from AI recommendation
-                          </p>
-                        )}
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex flex-wrap gap-2">
-                      <select
-                        value={request.status}
-                        onChange={(e) => handleStatusUpdate(request.id, e.target.value as WasteRequest['status'])}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="Assigned">Assigned</option>
-                        <option value="Accepted">Accepted</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Completed">Completed</option>
-                      </select>
-
-                      <button
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setShowModal(true);
-                        }}
-                        className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
-                      >
-                        Assign Partner
-                      </button>
-
-                      {request.aiRecommendedPartner && request.partnerId !== request.aiRecommendedPartner && (
-                        <button
-                          onClick={() => approveAIPartner(request)}
-                          className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600"
-                        >
-                          ✓ Approve AI Partner
-                        </button>
-                      )}
-
-                      <button
-                        className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
-                        title="Schedule pickup (feature coming soon)"
-                      >
-                        📅 Schedule
-                      </button>
+                      <p className="text-xs text-gray-500">Waste requests are automatically assigned by the system</p>
                     </div>
                   </div>
                 </div>
@@ -327,70 +309,7 @@ const AdminWasteRequestsPage: React.FC = () => {
           )}
         </div>
 
-        {/* Partner Assignment Modal */}
-        {showModal && selectedRequest && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white max-h-96 overflow-y-auto">
-              <div className="mt-3">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  Assign Partner for {selectedRequest.type} - {selectedRequest.quantity}
-                </h3>
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>AI Recommended:</strong> {getPartnerName(selectedRequest.aiRecommendedPartner)}
-                  </p>
-                  <p className="text-sm text-blue-800">
-                    <strong>Location:</strong> {selectedRequest.location}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  {partners
-                    .filter(p => p.verificationStatus === 'approved')
-                    .sort((a, b) => {
-                      // Sort AI recommended partner first
-                      if (a.id === selectedRequest.aiRecommendedPartner) return -1;
-                      if (b.id === selectedRequest.aiRecommendedPartner) return 1;
-                      return a.name.localeCompare(b.name);
-                    })
-                    .map((partner) => (
-                    <button
-                      key={partner.id}
-                      onClick={() => handlePartnerAssignment(selectedRequest.id, partner.id)}
-                      className={`w-full text-left p-3 border rounded hover:bg-gray-50 ${
-                        partner.id === selectedRequest.aiRecommendedPartner
-                          ? 'border-green-300 bg-green-50'
-                          : 'border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{partner.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {partner.organization} - {partner.partnerType}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Areas: {partner.serviceAreas?.join(', ') || 'Not specified'}
-                          </div>
-                        </div>
-                        {partner.id === selectedRequest.aiRecommendedPartner && (
-                          <span className="text-green-600 font-semibold">🤖 AI Recommended</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex justify-end mt-4 space-x-2">
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );

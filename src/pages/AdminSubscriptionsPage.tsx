@@ -1,40 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { dbService } from '../services/dbService';
 import { Partner, SubscriptionPlan, PartnerSubscription, SubscriptionStatus } from '../types';
+import { useAuth } from '../hooks/useAuth';
+import { emailService } from '../services/emailService';
 
 const AdminSubscriptionsPage: React.FC = () => {
+  const { admin } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([
     {
-      id: 'basic-monthly',
-      name: 'Basic Monthly',
-      amount: 99,
+      id: 'monthly',
+      name: 'Monthly Plan',
+      amount: 279,
       duration: 'monthly',
-      features: ['Waste collection requests', 'Basic analytics', 'Email support'],
+      features: ['Unlimited waste requests', 'Advanced AI insights', 'Priority 24/7 support'],
       isActive: true
     },
     {
-      id: 'premium-monthly',
-      name: 'Premium Monthly',
-      amount: 199,
-      duration: 'monthly',
-      features: ['All Basic features', 'Advanced analytics', 'Priority support', 'Custom branding'],
+      id: 'quarterly',
+      name: '3 Months Plan',
+      amount: 799,
+      duration: 'quarterly',
+      features: ['Unlimited waste requests', 'Advanced AI insights', 'Priority 24/7 support', '₹38 savings (5% off)'],
       isActive: true
     },
     {
-      id: 'basic-yearly',
-      name: 'Basic Yearly',
-      amount: 999,
+      id: 'half-yearly',
+      name: '6 Months Plan',
+      amount: 1599,
+      duration: 'half-yearly',
+      features: ['Unlimited waste requests', 'Advanced AI insights', 'Priority 24/7 support', '₹75 savings (4% off)'],
+      isActive: true
+    },
+    {
+      id: 'yearly',
+      name: 'Yearly Plan',
+      amount: 3199,
       duration: 'yearly',
-      features: ['Waste collection requests', 'Basic analytics', 'Email support', '2 months free'],
-      isActive: true
-    },
-    {
-      id: 'premium-yearly',
-      name: 'Premium Yearly',
-      amount: 1999,
-      duration: 'yearly',
-      features: ['All Basic features', 'Advanced analytics', 'Priority support', 'Custom branding', '2 months free'],
+      features: ['Unlimited waste requests', 'Advanced AI insights', 'Priority 24/7 support', '₹148 savings (4% off)'],
       isActive: true
     }
   ]);
@@ -53,18 +56,70 @@ const AdminSubscriptionsPage: React.FC = () => {
   });
 
   useEffect(() => {
+    // Load plans from database
+    const unsubscribePlans = dbService.subscribeToSubscriptionPlans((plans) => {
+      if (plans.length > 0) {
+        setSubscriptionPlans(plans);
+      }
+    });
+
     // Set up real-time listener for partners
-    const unsubscribe = dbService.subscribeToPartners((partnersList) => {
+    const unsubscribePartners = dbService.subscribeToPartners((partnersList) => {
       setPartners(partnersList);
       setLoading(false);
+      
+      // Check for expired subscriptions
+      checkExpiredSubscriptions(partnersList);
     });
 
     // Initial load
     loadPartners();
 
-    // Cleanup listener on unmount
-    return () => unsubscribe();
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribePlans();
+      unsubscribePartners();
+    };
   }, []);
+
+  const checkExpiredSubscriptions = async (partnersList: Partner[]) => {
+    const now = new Date();
+    
+    for (const partner of partnersList) {
+      if (partner.subscription?.status === 'active' && partner.subscription.expiryDate) {
+        const expiryDate = new Date(partner.subscription.expiryDate);
+        
+        if (expiryDate < now) {
+          // Subscription has expired, update it
+          const updatedSubscription = {
+            ...partner.subscription,
+            status: 'expired' as SubscriptionStatus
+          };
+          
+          await dbService.updatePartner(partner.id, {
+            subscription: updatedSubscription
+          });
+          
+          // Create audit log
+          await dbService.createAuditLog({
+            adminId: 'system',
+            adminName: 'System',
+            action: 'Subscription Auto-Expired',
+            actionType: 'update',
+            details: `Subscription automatically expired for ${partner.name}`,
+            timestamp: new Date().toISOString(),
+            entityType: 'subscription',
+            entityId: partner.id,
+            metadata: {
+              partnerId: partner.id,
+              partnerName: partner.name,
+              expiryDate: partner.subscription.expiryDate
+            }
+          });
+        }
+      }
+    }
+  };
 
   const loadPartners = async () => {
     try {
@@ -97,32 +152,29 @@ const AdminSubscriptionsPage: React.FC = () => {
     }
   };
 
-  const calculateRevenue = () => {
-    const activeSubscriptions = partners.filter(p =>
-      p.subscription?.status === 'active'
-    );
-
+  const revenue = useMemo(() => {
+    const activeSubscriptions = partners.filter(p => p.subscription?.status === 'active');
+    
     const monthlyRevenue = activeSubscriptions
       .filter(p => p.subscription?.planId?.includes('monthly'))
       .reduce((sum, p) => sum + (p.subscription?.amount || 0), 0);
-
+    
     const yearlyRevenue = activeSubscriptions
       .filter(p => p.subscription?.planId?.includes('yearly'))
       .reduce((sum, p) => sum + (p.subscription?.amount || 0), 0);
-
+    
     return {
       monthly: monthlyRevenue,
       yearly: yearlyRevenue,
       total: monthlyRevenue + yearlyRevenue,
       activeSubscriptions: activeSubscriptions.length
     };
-  };
+  }, [partners]);
 
-  const handleCreatePlan = () => {
+  const handleCreatePlan = async () => {
     if (!newPlan.name || !newPlan.amount) return;
 
-    const plan: SubscriptionPlan = {
-      id: `custom-${Date.now()}`,
+    const plan: Omit<SubscriptionPlan, 'id'> = {
       name: newPlan.name,
       amount: newPlan.amount,
       duration: newPlan.duration || 'monthly',
@@ -130,9 +182,14 @@ const AdminSubscriptionsPage: React.FC = () => {
       isActive: newPlan.isActive ?? true
     };
 
-    setSubscriptionPlans([...subscriptionPlans, plan]);
-    setNewPlan({ name: '', amount: 0, duration: 'monthly', features: [], isActive: true });
-    setShowPlanModal(false);
+    try {
+      await dbService.createSubscriptionPlan(plan);
+      setNewPlan({ name: '', amount: 0, duration: 'monthly', features: [], isActive: true });
+      setShowPlanModal(false);
+    } catch (error) {
+      console.error('Error creating plan:', error);
+      alert('Failed to create plan');
+    }
   };
 
   const handleActivateSubscription = async (partner: Partner, plan: SubscriptionPlan) => {
@@ -145,6 +202,10 @@ const AdminSubscriptionsPage: React.FC = () => {
     const startDate = new Date().toISOString();
     const expiryDate = plan.duration === 'yearly'
       ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+      : plan.duration === 'half-yearly'
+      ? new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+      : plan.duration === 'quarterly'
+      ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const subscription: PartnerSubscription = {
@@ -167,6 +228,36 @@ const AdminSubscriptionsPage: React.FC = () => {
           : p
       ));
 
+      // Create audit log
+      await dbService.createAuditLog({
+        adminId: admin?.id || 'unknown',
+        adminName: admin?.name || 'Admin User',
+        action: 'Subscription Activated',
+        actionType: 'create',
+        details: `Activated ${plan.name} subscription for ${partner.name} (₹${plan.amount})`,
+        timestamp: new Date().toISOString(),
+        entityType: 'subscription',
+        entityId: partner.id,
+        newValue: { subscription, planName: plan.name },
+        metadata: {
+          partnerId: partner.id,
+          partnerName: partner.name,
+          planId: plan.id,
+          planName: plan.name,
+          amount: plan.amount,
+          duration: plan.duration
+        }
+      });
+
+      // Send email notification
+      await emailService.sendSubscriptionActivated(
+        partner.email,
+        partner.name,
+        plan.name,
+        plan.amount,
+        expiryDate
+      );
+
       setShowSubscriptionModal(false);
       setSelectedPartner(null);
       setSelectedPlan(null);
@@ -176,37 +267,51 @@ const AdminSubscriptionsPage: React.FC = () => {
   };
 
   const handleDeactivateSubscription = async (partnerId: string) => {
+    // This function is kept for manual override if needed in future
+    // Currently not exposed in UI
     try {
       const partner = partners.find(p => p.id === partnerId);
       if (!partner?.subscription) return;
 
+      const previousSubscription = { ...partner.subscription };
       const updatedSubscription = {
         ...partner.subscription,
         status: 'expired' as SubscriptionStatus
       };
 
       await dbService.updatePartner(partnerId, {
-        subscription: updatedSubscription,
-        status: 'inactive' // Also update partner status
+        subscription: updatedSubscription
       });
 
-      setPartners(partners.map(p =>
-        p.id === partnerId
-          ? { ...p, subscription: updatedSubscription, status: 'inactive' }
-          : p
-      ));
+      // Create audit log
+      await dbService.createAuditLog({
+        adminId: admin?.id || 'unknown',
+        adminName: admin?.name || 'Admin User',
+        action: 'Subscription Manually Deactivated',
+        actionType: 'update',
+        details: `Manually deactivated subscription for ${partner.name}`,
+        timestamp: new Date().toISOString(),
+        entityType: 'subscription',
+        entityId: partnerId,
+        previousValue: { subscription: previousSubscription },
+        newValue: { subscription: updatedSubscription },
+        metadata: {
+          partnerId,
+          partnerName: partner.name
+        }
+      });
     } catch (error) {
       console.error('Error deactivating subscription:', error);
     }
   };
 
-  const filteredPartners = partners.filter(p => {
-    const subStatus = p.subscription?.status || 'none';
-    if (filter === 'all') return true;
-    return subStatus === filter;
-  });
-
-  const revenue = calculateRevenue();
+  const filteredPartners = useMemo(() => {
+    return partners.filter(p => {
+      const subStatus = p.subscription?.status || 'none';
+      if (filter === 'all') return true;
+      return subStatus === filter;
+    });
+  }, [partners, filter]);
 
   if (loading) {
     return (
@@ -223,12 +328,18 @@ const AdminSubscriptionsPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">💳 Subscription Management</h2>
-          <button
-            onClick={() => setShowPlanModal(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            + Create Plan
-          </button>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <button
+              onClick={() => setShowPlanModal(true)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              + Create Plan
+            </button>
+          </div>
         </div>
 
         {/* Revenue Summary */}
@@ -273,7 +384,7 @@ const AdminSubscriptionsPage: React.FC = () => {
 
         {/* Subscription Plans */}
         <div className="mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Subscription Plans</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Subscription Plans (Same Features - Different Billing)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {subscriptionPlans.filter(plan => plan.isActive).map((plan) => (
               <div key={plan.id} className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
@@ -430,12 +541,9 @@ const AdminSubscriptionsPage: React.FC = () => {
                         {isVerified ? 'Activate Subscription' : 'Verification Required'}
                       </button>
                     ) : (
-                      <button
-                        onClick={() => handleDeactivateSubscription(partner.id)}
-                        className="flex-1 px-3 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                      >
-                        Deactivate
-                      </button>
+                      <div className="flex-1 px-3 py-2 text-sm bg-green-50 text-green-700 rounded-lg text-center border border-green-200">
+                        Active until {new Date(subscription.expiryDate).toLocaleDateString()}
+                      </div>
                     )}
                   </div>
                 </div>

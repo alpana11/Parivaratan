@@ -6,24 +6,50 @@ const AdminSchedulingPage: React.FC = () => {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [wasteRequests, setWasteRequests] = useState<WasteRequest[]>([]);
   const [schedules, setSchedules] = useState<PickupSchedule[]>([]);
+  const [partnerSchedules, setPartnerSchedules] = useState<any[]>([]);
   const [areaSchedules, setAreaSchedules] = useState<AreaSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedArea, setSelectedArea] = useState<string>('all');
-  const [currentWeek, setCurrentWeek] = useState(new Date());
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [selectedSchedule, setSelectedSchedule] = useState<PickupSchedule | null>(null);
-  const [newSchedule, setNewSchedule] = useState<Partial<PickupSchedule>>({
-    area: '',
-    date: '',
-    timeSlot: '',
-    assignedPartnerId: '',
-    wasteRequestIds: [],
-    status: 'scheduled',
-    notes: ''
-  });
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedSchedule, setSelectedSchedule] = useState<any | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [fromDateModal, setFromDateModal] = useState(false);
 
   useEffect(() => {
     loadData();
+    
+    // Subscribe to partner-created scheduled pickups
+    const unsubscribeSchedules = dbService.subscribeToAllScheduledPickups((pickups) => {
+      setPartnerSchedules(pickups);
+    });
+
+    // Set up real-time listener for waste requests
+    const unsubscribe = dbService.subscribeToWasteRequests((updatedRequests) => {
+      setWasteRequests(updatedRequests);
+      
+      // Update schedules from waste requests
+      const scheduledRequests = updatedRequests
+        .filter(r => r.scheduledDate && r.scheduledTime)
+        .map(r => ({
+          id: r.id,
+          area: r.location,
+          date: r.scheduledDate!,
+          timeSlot: r.scheduledTime!,
+          assignedPartnerId: r.partnerId,
+          wasteRequestIds: [r.id],
+          status: r.status === 'accepted' ? 'scheduled' as const : 'completed' as const,
+          notes: `${r.scheduleMethod === 'pickup' ? 'Pickup' : 'Drop-off'} - ${r.type}`,
+          createdAt: r.createdAt,
+          updatedAt: r.createdAt
+        }));
+      
+      setSchedules(scheduledRequests);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeSchedules();
+    };
   }, []);
 
   const loadData = async () => {
@@ -36,43 +62,36 @@ const AdminSchedulingPage: React.FC = () => {
       setPartners(partnersData);
       setWasteRequests(wasteRequestsData);
 
-      // Mock area schedules - in real app, this would come from database
-      const mockAreaSchedules: AreaSchedule[] = [
-        {
-          area: 'Downtown',
-          schedules: [],
-          assignedPartners: partnersData.filter(p => p.serviceAreas?.includes('Downtown')).map(p => p.id),
-          capacity: 20,
-          priority: 'high'
-        },
-        {
-          area: 'Residential North',
-          schedules: [],
-          assignedPartners: partnersData.filter(p => p.serviceAreas?.includes('Residential North')).map(p => p.id),
-          capacity: 15,
-          priority: 'medium'
-        },
-        {
-          area: 'Industrial Zone',
-          schedules: [],
-          assignedPartners: partnersData.filter(p => p.serviceAreas?.includes('Industrial Zone')).map(p => p.id),
-          capacity: 25,
-          priority: 'high'
-        },
-        {
-          area: 'Suburban South',
-          schedules: [],
-          assignedPartners: partnersData.filter(p => p.serviceAreas?.includes('Suburban South')).map(p => p.id),
-          capacity: 12,
-          priority: 'low'
-        }
-      ];
+      // Convert waste requests with schedules to PickupSchedule format
+      const scheduledRequests = wasteRequestsData
+        .filter(r => r.scheduledDate && r.scheduledTime)
+        .map(r => ({
+          id: r.id,
+          area: typeof r.location === 'string' ? r.location : r.location?.city || 'Unknown',
+          date: r.scheduledDate!,
+          timeSlot: r.scheduledTime!,
+          assignedPartnerId: r.partnerId,
+          wasteRequestIds: [r.id],
+          status: r.status === 'accepted' ? 'scheduled' as const : 'completed' as const,
+          notes: `${r.scheduleMethod === 'pickup' ? 'Pickup' : 'Drop-off'} - ${r.type}`,
+          createdAt: r.createdAt,
+          updatedAt: r.createdAt
+        }));
+
+      setSchedules(scheduledRequests);
+
+      // Extract unique areas from both waste requests and partner schedules
+      const wasteAreas = wasteRequestsData.map(r => typeof r.location === 'string' ? r.location : r.location?.city || 'Unknown');
+      const uniqueAreas = Array.from(new Set(wasteAreas));
+      const mockAreaSchedules: AreaSchedule[] = uniqueAreas.map(area => ({
+        area,
+        schedules: [],
+        assignedPartners: partnersData.filter(p => p.serviceAreas?.includes(area)).map(p => p.id),
+        capacity: 20,
+        priority: 'medium' as const
+      }));
 
       setAreaSchedules(mockAreaSchedules);
-
-      // Mock schedules - in real app, this would come from database
-      const mockSchedules: PickupSchedule[] = generateMockSchedules(partnersData, wasteRequestsData, mockAreaSchedules);
-      setSchedules(mockSchedules);
 
     } catch (error) {
       console.error('Error loading scheduling data:', error);
@@ -81,63 +100,50 @@ const AdminSchedulingPage: React.FC = () => {
     }
   };
 
-  const generateMockSchedules = (partners: Partner[], requests: WasteRequest[], areas: AreaSchedule[]): PickupSchedule[] => {
-    const schedules: PickupSchedule[] = [];
-    const today = new Date();
-
-    areas.forEach(area => {
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-
-        // Create 2-3 time slots per day per area
-        const timeSlots = ['09:00-11:00', '14:00-16:00', '16:00-18:00'];
-        timeSlots.forEach((slot, slotIndex) => {
-          if (Math.random() > 0.3) { // 70% chance of having a schedule
-            const assignedPartner = area.assignedPartners[Math.floor(Math.random() * area.assignedPartners.length)];
-            const areaRequests = requests.filter(r =>
-              r.location.toLowerCase().includes(area.area.toLowerCase().split(' ')[0]) &&
-              r.status !== 'Completed'
-            ).slice(0, 3); // Max 3 requests per slot
-
-            if (areaRequests.length > 0) {
-              schedules.push({
-                id: `schedule-${area.area}-${date.toISOString().split('T')[0]}-${slotIndex}`,
-                area: area.area,
-                date: date.toISOString().split('T')[0],
-                timeSlot: slot,
-                assignedPartnerId: assignedPartner,
-                wasteRequestIds: areaRequests.map(r => r.id),
-                status: Math.random() > 0.7 ? 'completed' : Math.random() > 0.5 ? 'in_progress' : 'scheduled',
-                notes: Math.random() > 0.8 ? 'High priority pickup' : undefined,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              });
-            }
-          }
-        });
-      }
-    });
-
-    return schedules;
-  };
-
-  const getWeekDates = (weekStart: Date) => {
+  const getMonthDates = (month: Date) => {
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    const firstDay = new Date(year, monthIndex, 1);
+    const lastDay = new Date(year, monthIndex + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+    
     const dates = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + i);
-      dates.push(date);
+    const current = new Date(startDate);
+    
+    while (dates.length < 42) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
     }
+    
     return dates;
   };
 
   const getSchedulesForDate = (date: Date, area?: string) => {
     const dateStr = date.toISOString().split('T')[0];
-    return schedules.filter(s =>
+    
+    // Combine both waste request schedules and partner-created schedules
+    const wasteSchedules = schedules.filter(s =>
       s.date === dateStr &&
       (!area || area === 'all' || s.area === area)
     );
+    
+    const partnerPickups = partnerSchedules
+      .filter(p => p.date === dateStr && (!area || area === 'all' || p.area === area))
+      .map(p => ({
+        id: p.id,
+        area: p.area,
+        date: p.date,
+        timeSlot: p.time,
+        assignedPartnerId: p.partnerId,
+        wasteRequestIds: [],
+        status: 'scheduled' as const,
+        notes: p.notes || 'Partner scheduled pickup',
+        createdAt: p.createdAt,
+        updatedAt: p.createdAt
+      }));
+    
+    return [...wasteSchedules, ...partnerPickups];
   };
 
   const getPartnerName = (partnerId: string) => {
@@ -165,47 +171,24 @@ const AdminSchedulingPage: React.FC = () => {
     }
   };
 
-  const handleCreateSchedule = () => {
-    if (!newSchedule.area || !newSchedule.date || !newSchedule.timeSlot || !newSchedule.assignedPartnerId) {
-      alert('Please fill in all required fields');
-      return;
+  const handleUpdateSchedule = async (scheduleId: string, updates: Partial<PickupSchedule>) => {
+    try {
+      // Update the waste request status instead
+      await dbService.updateWasteRequest(scheduleId, {
+        status: updates.status === 'completed' ? 'accepted' : 'accepted'
+      });
+      if (selectedSchedule?.id === scheduleId) {
+        setSelectedSchedule({ ...selectedSchedule, ...updates });
+      }
+      await loadData(); // Refresh data
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      alert('Failed to update schedule. Please try again.');
     }
-
-    const schedule: PickupSchedule = {
-      id: `schedule-${Date.now()}`,
-      area: newSchedule.area,
-      date: newSchedule.date,
-      timeSlot: newSchedule.timeSlot,
-      assignedPartnerId: newSchedule.assignedPartnerId,
-      wasteRequestIds: newSchedule.wasteRequestIds || [],
-      status: newSchedule.status as PickupSchedule['status'] || 'scheduled',
-      notes: newSchedule.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setSchedules([...schedules, schedule]);
-    setShowScheduleModal(false);
-    setNewSchedule({
-      area: '',
-      date: '',
-      timeSlot: '',
-      assignedPartnerId: '',
-      wasteRequestIds: [],
-      status: 'scheduled',
-      notes: ''
-    });
   };
 
-  const handleUpdateSchedule = (scheduleId: string, updates: Partial<PickupSchedule>) => {
-    setSchedules(schedules.map(s =>
-      s.id === scheduleId
-        ? { ...s, ...updates, updatedAt: new Date().toISOString() }
-        : s
-    ));
-  };
-
-  const weekDates = getWeekDates(currentWeek);
+  const monthDates = getMonthDates(currentMonth);
+  const currentMonthIndex = currentMonth.getMonth();
   const filteredSchedules = selectedArea === 'all'
     ? schedules
     : schedules.filter(s => s.area === selectedArea);
@@ -224,37 +207,38 @@ const AdminSchedulingPage: React.FC = () => {
     <div className="p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">📅 Pickup Scheduling</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">📅 Partner Pickup Schedules</h2>
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">View schedules created by partners in real-time</p>
+          </div>
           <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setShowScheduleModal(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              + Create Schedule
-            </button>
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => {
-                  const newWeek = new Date(currentWeek);
-                  newWeek.setDate(currentWeek.getDate() - 7);
-                  setCurrentWeek(newWeek);
+                  const newMonth = new Date(currentMonth);
+                  newMonth.setMonth(currentMonth.getMonth() - 1);
+                  setCurrentMonth(newMonth);
                 }}
                 className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
-                ← Previous Week
+                ← Previous Month
               </button>
               <span className="text-sm font-medium text-gray-700">
-                {weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()}
+                {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </span>
               <button
                 onClick={() => {
-                  const newWeek = new Date(currentWeek);
-                  newWeek.setDate(currentWeek.getDate() + 7);
-                  setCurrentWeek(newWeek);
+                  const newMonth = new Date(currentMonth);
+                  newMonth.setMonth(currentMonth.getMonth() + 1);
+                  setCurrentMonth(newMonth);
                 }}
                 className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
-                Next Week →
+                Next Month →
               </button>
             </div>
           </div>
@@ -265,98 +249,78 @@ const AdminSchedulingPage: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedArea('all')}
-              className={`px-3 py-2 text-sm rounded-lg transition-colors ${
-                selectedArea === 'all'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className="px-4 py-2 text-sm rounded-lg bg-blue-500 text-white shadow-md"
             >
               All Areas ({areaSchedules.length})
             </button>
-            {areaSchedules.map(area => (
-              <button
-                key={area.area}
-                onClick={() => setSelectedArea(area.area)}
-                className={`px-3 py-2 text-sm rounded-lg transition-colors ${
-                  selectedArea === area.area
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {area.area} ({area.assignedPartners.length} partners)
-              </button>
-            ))}
           </div>
         </div>
 
-        {/* Weekly Calendar View */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="grid grid-cols-8 border-b border-gray-200">
-            <div className="p-4 bg-gray-50 font-semibold text-gray-900">Area</div>
-            {weekDates.map((date, index) => (
-              <div key={index} className="p-4 bg-gray-50 text-center border-l border-gray-200">
-                <div className="font-semibold text-gray-900">
-                  {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {date.getDate()}
+        {/* Monthly Calendar View */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 bg-gradient-to-b from-gray-50 to-white border-b border-gray-200">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+              <div key={day} className="p-3 text-center border-r border-gray-200">
+                <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  {day}
                 </div>
               </div>
             ))}
           </div>
 
-          {areaSchedules.map(area => {
-            if (selectedArea !== 'all' && selectedArea !== area.area) return null;
-
-            return (
-              <div key={area.area} className="grid grid-cols-8 border-b border-gray-100">
-                <div className="p-4 bg-white">
-                  <div className="font-medium text-gray-900">{area.area}</div>
-                  <div className="text-sm text-gray-600">
-                    {area.assignedPartners.length} partners
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Capacity: {area.capacity}/day
-                  </div>
-                  <div className={`inline-flex px-2 py-1 text-xs rounded-full mt-1 ${
-                    area.priority === 'high' ? 'bg-red-100 text-red-800' :
-                    area.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7">
+            {monthDates.map((date, index) => {
+              const isToday = date.toDateString() === new Date().toDateString();
+              const isCurrentMonth = date.getMonth() === currentMonthIndex;
+              const daySchedules = areaSchedules.flatMap(area => 
+                getSchedulesForDate(date, selectedArea === 'all' ? undefined : selectedArea)
+              );
+              
+              return (
+                <div
+                  key={index}
+                  className={`min-h-[120px] p-2 border-r border-b border-gray-200 ${
+                    isToday ? 'bg-blue-50/30' : isCurrentMonth ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50'
+                  } transition-colors`}
+                >
+                  <div className={`text-sm font-semibold mb-2 ${
+                    isToday ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
                   }`}>
-                    {area.priority} priority
+                    {date.getDate()}
+                  </div>
+                  <div className="space-y-1">
+                    {daySchedules.slice(0, 3).map(schedule => (
+                      <div
+                        key={schedule.id}
+                        className={`p-1.5 rounded text-xs cursor-pointer border-l-2 shadow-sm hover:shadow-md transition-all ${
+                          schedule.status === 'scheduled' ? 'bg-blue-50 border-blue-500 hover:bg-blue-100' :
+                          schedule.status === 'in_progress' ? 'bg-yellow-50 border-yellow-500 hover:bg-yellow-100' :
+                          schedule.status === 'completed' ? 'bg-green-50 border-green-500 hover:bg-green-100' :
+                          'bg-red-50 border-red-500 hover:bg-red-100'
+                        }`}
+                        onClick={() => {
+                          setFromDateModal(false);
+                          setSelectedSchedule(schedule);
+                        }}
+                      >
+                        <div className="font-semibold truncate">{schedule.timeSlot}</div>
+                      </div>
+                    ))}
+                    {daySchedules.length > 3 && (
+                      <button
+                        onClick={() => setSelectedDate(date)}
+                        className="w-full text-xs text-blue-600 hover:text-blue-800 font-medium py-1 hover:bg-blue-50 rounded transition-colors"
+                      >
+                        View all {daySchedules.length}
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                {weekDates.map((date, dateIndex) => {
-                  const daySchedules = getSchedulesForDate(date, area.area);
-                  return (
-                    <div key={dateIndex} className="p-2 border-l border-gray-200 bg-gray-50 min-h-[120px]">
-                      <div className="space-y-1">
-                        {daySchedules.map(schedule => (
-                          <div
-                            key={schedule.id}
-                            className={`p-2 rounded text-xs cursor-pointer border ${getStatusColor(schedule.status)}`}
-                            onClick={() => setSelectedSchedule(schedule)}
-                          >
-                            <div className="font-medium">{schedule.timeSlot}</div>
-                            <div className="truncate">{getPartnerName(schedule.assignedPartnerId)}</div>
-                            <div className="text-xs opacity-75">
-                              {schedule.wasteRequestIds.length} pickups
-                            </div>
-                          </div>
-                        ))}
-                        {daySchedules.length === 0 && (
-                          <div className="text-xs text-gray-400 text-center py-4">
-                            No schedules
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {/* Schedule Details Modal */}
@@ -399,6 +363,13 @@ const AdminSchedulingPage: React.FC = () => {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Address</label>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded border border-gray-200">
+                      {selectedSchedule.area}
+                    </p>
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Waste Requests ({selectedSchedule.wasteRequestIds.length})</label>
                     <div className="space-y-2 max-h-32 overflow-y-auto">
                       {selectedSchedule.wasteRequestIds.map(requestId => {
@@ -409,7 +380,7 @@ const AdminSchedulingPage: React.FC = () => {
                               <span className="text-sm font-medium">{request.type}</span>
                               <span className="text-xs text-gray-600 ml-2">{request.quantity}</span>
                             </div>
-                            <span className="text-xs text-gray-500">{request.location}</span>
+                            <span className="text-xs text-gray-500">{typeof request.location === 'string' ? request.location : request.location?.city || 'Unknown'}</span>
                           </div>
                         ) : null;
                       })}
@@ -423,19 +394,14 @@ const AdminSchedulingPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex justify-end space-x-3 pt-4 border-t">
-                    <select
-                      value={selectedSchedule.status}
-                      onChange={(e) => handleUpdateSchedule(selectedSchedule.id, { status: e.target.value as PickupSchedule['status'] })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="scheduled">Scheduled</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                  <div className="flex justify-end pt-4 border-t">
                     <button
-                      onClick={() => setSelectedSchedule(null)}
+                      onClick={() => {
+                        setSelectedSchedule(null);
+                        if (fromDateModal) {
+                          setFromDateModal(false);
+                        }
+                      }}
                       className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Close
@@ -447,107 +413,73 @@ const AdminSchedulingPage: React.FC = () => {
           </div>
         )}
 
-        {/* Create Schedule Modal */}
-        {showScheduleModal && (
+        {/* Day Schedules Modal */}
+        {selectedDate && !selectedSchedule && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl max-w-md w-full mx-4">
+            <div className="bg-white rounded-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-gray-900">Create New Schedule</h3>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Schedules for {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </h3>
                   <button
-                    onClick={() => setShowScheduleModal(false)}
+                    onClick={() => setSelectedDate(null)}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Area</label>
-                    <select
-                      value={newSchedule.area}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, area: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <div className="space-y-3">
+                  {areaSchedules.flatMap(area => 
+                    getSchedulesForDate(selectedDate, selectedArea === 'all' ? undefined : selectedArea)
+                  ).map(schedule => (
+                    <div
+                      key={schedule.id}
+                      className={`p-4 rounded-lg cursor-pointer border-l-4 shadow-sm hover:shadow-md transition-all ${
+                        schedule.status === 'scheduled' ? 'bg-blue-50 border-blue-500 hover:bg-blue-100' :
+                        schedule.status === 'in_progress' ? 'bg-yellow-50 border-yellow-500 hover:bg-yellow-100' :
+                        schedule.status === 'completed' ? 'bg-green-50 border-green-500 hover:bg-green-100' :
+                        'bg-red-50 border-red-500 hover:bg-red-100'
+                      }`}
+                      onClick={() => {
+                        setFromDateModal(true);
+                        setSelectedSchedule(schedule);
+                      }}
                     >
-                      <option value="">Select Area</option>
-                      {areaSchedules.map(area => (
-                        <option key={area.area} value={area.area}>{area.area}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                    <input
-                      type="date"
-                      value={newSchedule.date}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot</label>
-                    <select
-                      value={newSchedule.timeSlot}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, timeSlot: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Time Slot</option>
-                      <option value="09:00-11:00">9:00 AM - 11:00 AM</option>
-                      <option value="11:00-13:00">11:00 AM - 1:00 PM</option>
-                      <option value="14:00-16:00">2:00 PM - 4:00 PM</option>
-                      <option value="16:00-18:00">4:00 PM - 6:00 PM</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Partner</label>
-                    <select
-                      value={newSchedule.assignedPartnerId}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, assignedPartnerId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Partner</option>
-                      {partners
-                        .filter(p => p.status === 'active' && (!newSchedule.area || p.serviceAreas?.includes(newSchedule.area)))
-                        .map(partner => (
-                        <option key={partner.id} value={partner.id}>{partner.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-                    <textarea
-                      value={newSchedule.notes}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, notes: e.target.value })}
-                      placeholder="Any special instructions..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={3}
-                    />
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-gray-900">{schedule.timeSlot}</div>
+                          <div className="text-sm text-gray-600 mt-1">{getPartnerName(schedule.assignedPartnerId)}</div>
+                          <div className="text-xs text-gray-500 mt-1">{schedule.area}</div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(schedule.status)}`}>
+                            {getStatusLabel(schedule.status)}
+                          </span>
+                          <div className="text-xs text-gray-600 mt-2">
+                            {schedule.wasteRequestIds.length} pickup{schedule.wasteRequestIds.length !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="flex justify-end space-x-3 mt-6">
+                <div className="flex justify-end pt-4 border-t mt-6">
                   <button
-                    onClick={() => setShowScheduleModal(false)}
+                    onClick={() => setSelectedDate(null)}
                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateSchedule}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    Create Schedule
+                    Close
                   </button>
                 </div>
               </div>
             </div>
           </div>
         )}
+
+
       </div>
     </div>
   );

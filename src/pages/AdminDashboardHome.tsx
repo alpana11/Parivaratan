@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { dbService } from '../services/dbService';
 
 const AdminDashboardHome: React.FC = () => {
   const [stats, setStats] = useState({
     totalRequests: 0,
-    pendingRequests: 0,
-    assignedRequests: 0,
+    acceptedRequests: 0,
     inProgressRequests: 0,
     completedRequests: 0,
     totalPartners: 0,
     verifiedPartners: 0,
     pendingPartners: 0,
     activeSubscriptions: 0,
-    totalRevenue: 0,
+    activeUsers: 0,
     totalPoints: 0,
     co2Reduction: 0,
     wasteDiverted: 0,
@@ -23,147 +22,245 @@ const AdminDashboardHome: React.FC = () => {
 
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [wasteRequests, setWasteRequests] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [scheduledPickups, setScheduledPickups] = useState<any[]>([]);
 
   useEffect(() => {
-    // Set up real-time listeners for instant updates
-    const unsubscribeWasteRequests = dbService.subscribeToWasteRequests((wasteRequests) => {
-      updateDashboardData(wasteRequests, null);
+    const unsubscribeWasteRequests = dbService.subscribeToWasteRequests((requests) => {
+      setWasteRequests(requests);
     });
 
-    const unsubscribePartners = dbService.subscribeToPartners((partners) => {
-      updateDashboardData(null, partners);
+    const unsubscribePartners = dbService.subscribeToPartners((partnersList) => {
+      setPartners(partnersList);
     });
 
-    // Initial load
-    loadDashboardData();
+    const unsubscribeVouchers = dbService.listenToVouchers((vouchersList) => {
+      setVouchers(vouchersList);
+    });
 
-    // Cleanup listeners on unmount
+    const unsubscribeScheduledPickups = dbService.subscribeToAllScheduledPickups((pickups) => {
+      setScheduledPickups(pickups);
+    });
+
     return () => {
       unsubscribeWasteRequests();
       unsubscribePartners();
+      unsubscribeVouchers();
+      unsubscribeScheduledPickups();
     };
   }, []);
 
-  const updateDashboardData = (wasteRequestsData: any[] | null, partnersData: any[] | null) => {
-    // Use current state if data not provided
-    const wasteRequests = wasteRequestsData !== null ? wasteRequestsData : [];
-    const partners = partnersData !== null ? partnersData : [];
+  useEffect(() => {
+    if (wasteRequests.length > 0 || partners.length > 0 || vouchers.length > 0 || scheduledPickups.length > 0) {
+      updateDashboardData(wasteRequests, partners, vouchers, scheduledPickups);
+      setIsLoading(false);
+    }
+  }, [wasteRequests, partners, vouchers, scheduledPickups]);
+
+  const updateDashboardData = (wasteRequestsData: any[], partnersData: any[], vouchersData: any[], scheduledPickupsData: any[]) => {
 
     // Calculate request stats
     const requestStats = {
-      totalRequests: wasteRequests.length,
-      pendingRequests: wasteRequests.filter((r: any) => r.status === 'Assigned').length,
-      assignedRequests: wasteRequests.filter((r: any) => r.status === 'Accepted').length,
-      inProgressRequests: wasteRequests.filter((r: any) => r.status === 'In Progress').length,
-      completedRequests: wasteRequests.filter((r: any) => r.status === 'Completed').length,
+      totalRequests: wasteRequestsData.length,
+      acceptedRequests: wasteRequestsData.filter((r: any) => r.status === 'Accepted' || r.status === 'accepted' || r.status === 'Assigned' || r.status === 'pending').length,
+      inProgressRequests: wasteRequestsData.filter((r: any) => {
+        const status = r.status?.toLowerCase();
+        return status === 'in progress' || status === 'scheduled' || status === 'in_progress' || r.status === 'In Progress' || r.status === 'Scheduled';
+      }).length + scheduledPickupsData.length,
+      completedRequests: wasteRequestsData.filter((r: any) => r.status === 'Completed').length,
     };
 
     // Calculate partner stats
     const partnerStats = {
-      totalPartners: partners.length,
-      verifiedPartners: partners.filter((p: any) => p.verificationStatus === 'approved').length,
-      pendingPartners: partners.filter((p: any) => p.verificationStatus === 'pending').length,
+      totalPartners: partnersData.length,
+      verifiedPartners: partnersData.filter((p: any) => p.verificationStatus === 'approved').length,
+      pendingPartners: partnersData.filter((p: any) => p.verificationStatus === 'pending').length,
     };
 
     // Calculate subscription stats
     const subscriptionStats = {
-      activeSubscriptions: partners.filter((p: any) => p.subscription?.status === 'active').length,
+      activeSubscriptions: partnersData.filter((p: any) => p.subscription?.status === 'active').length,
     };
 
-    // Calculate financial metrics
-    const totalRevenue = partners
-      .filter((p: any) => p.subscription?.status === 'active')
-      .reduce((sum: number, p: any) => sum + (p.subscription?.amount || 0), 0);
+    // Calculate active users (unique users who submitted requests)
+    const uniqueUserIds = new Set(wasteRequestsData.map((r: any) => r.userId).filter(Boolean));
+    const activeUsers = uniqueUserIds.size;
 
-    const totalPoints = partners.reduce((sum: number, p: any) => sum + (p.rewardPoints || 0), 0);
+    // Calculate reward points
+    const totalPoints = partnersData.reduce((sum: number, p: any) => sum + (p.rewardPoints || 0), 0);
 
     // Calculate environmental impact
-    const wasteDiverted = wasteRequests
+    const wasteDiverted = wasteRequestsData
       .filter((r: any) => r.status === 'Completed')
-      .reduce((sum: number, r: any) => sum + parseFloat(r.quantity.replace(' kg', '')), 0);
+      .reduce((sum: number, r: any) => {
+        const qty = r.quantity?.toString() || '0';
+        const num = parseFloat(qty.replace(/[^0-9.]/g, '')) || 0;
+        return sum + num;
+      }, 0);
 
-    const co2Reduction = wasteDiverted * 2.5; // 2.5 kg CO2 saved per kg waste diverted
+    const co2Reduction = wasteDiverted * 2.5;
 
-    // Mock voucher stats (would come from database)
+    // Calculate voucher stats from real-time data
     const voucherStats = {
-      activeVouchers: 25,
-      redeemedVouchers: 12,
+      activeVouchers: vouchersData.filter((v: any) => v.status === 'available').length,
+      redeemedVouchers: vouchersData.filter((v: any) => v.status === 'redeemed').length,
     };
 
     setStats({
       ...requestStats,
       ...partnerStats,
       ...subscriptionStats,
-      totalRevenue,
+      activeUsers,
       totalPoints,
       co2Reduction,
       wasteDiverted,
       ...voucherStats,
     });
 
-    // Generate recent activity (mock data)
-    const activities = [
-      { id: 1, type: 'request', message: 'New waste request submitted', time: '2 min ago' },
-      { id: 2, type: 'partner', message: 'Partner verification completed', time: '15 min ago' },
-      { id: 3, type: 'subscription', message: 'New subscription activated', time: '1 hour ago' },
-      { id: 4, type: 'reward', message: 'Reward points issued', time: '2 hours ago' },
-      { id: 5, type: 'voucher', message: 'Voucher redeemed', time: '3 hours ago' },
-    ];
-    setRecentActivity(activities);
+    // Generate real-time recent activity from actual data
+    const activities: { id: string; type: string; message: string; time: string; timestamp: number }[] = [];
+
+    // Get recent waste requests (last 5)
+    const sortedRequests = [...wasteRequestsData]
+      .filter((r: any) => r.createdAt)
+      .sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 5);
+
+    sortedRequests.forEach((request: any) => {
+      const requestTime = new Date(request.createdAt);
+      const now = new Date();
+      const diffMs = now.getTime() - requestTime.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      let timeAgo = '';
+      if (diffMins < 1) timeAgo = 'Just now';
+      else if (diffMins < 60) timeAgo = `${diffMins} min ago`;
+      else if (diffHours < 24) timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      else timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+      activities.push({
+        id: `request-${request.id}`,
+        type: 'request',
+        message: `New waste request - ${request.wasteType || request.type || 'Collection'} (${request.status || 'Pending'})`,
+        time: timeAgo,
+        timestamp: requestTime.getTime(),
+      });
+    });
+
+    // Get recent partners (last 3)
+    const sortedPartners = [...partnersData]
+      .filter((p: any) => p.createdAt)
+      .sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 3);
+
+    sortedPartners.forEach((partner: any) => {
+      const partnerTime = new Date(partner.createdAt);
+      const now = new Date();
+      const diffMs = now.getTime() - partnerTime.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      let timeAgo = '';
+      if (diffMins < 1) timeAgo = 'Just now';
+      else if (diffMins < 60) timeAgo = `${diffMins} min ago`;
+      else if (diffHours < 24) timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      else timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+      activities.push({
+        id: `partner-${partner.id}`,
+        type: 'partner',
+        message: `Partner "${partner.businessName || partner.name || 'New Partner'}" - ${partner.verificationStatus || 'pending'}`,
+        time: timeAgo,
+        timestamp: partnerTime.getTime(),
+      });
+    });
+
+    // Add subscription activities
+    partnersData
+      .filter((p: any) => p.subscription?.status === 'active' && p.subscription?.startDate)
+      .slice(0, 2)
+      .forEach((partner: any) => {
+        const subTime = new Date(partner.subscription.startDate);
+        const now = new Date();
+        const diffMs = now.getTime() - subTime.getTime();
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        let timeAgo = '';
+        if (diffHours < 24) timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        else timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+        activities.push({
+          id: `subscription-${partner.id}`,
+          type: 'subscription',
+          message: `Subscription activated for ${partner.businessName || 'Partner'}`,
+          time: timeAgo,
+          timestamp: subTime.getTime(),
+        });
+      });
+
+    // Sort all activities by timestamp (most recent first)
+    activities.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Take only the 5 most recent activities
+    const recentActivities = activities.slice(0, 5);
+
+    setRecentActivity(recentActivities);
   };
 
   const loadDashboardData = async () => {
-    try {
-      setIsLoading(true);
-
-      let wasteRequests: any[] = [];
-      let partners: any[] = [];
-
-      try {
-        wasteRequests = await dbService.getAllWasteRequests();
-      } catch (error) {
-        console.error('Error loading waste requests:', error);
-      }
-
-      try {
-        partners = await dbService.getAllPartners();
-      } catch (error) {
-        console.error('Error loading partners:', error);
-      }
-
-      updateDashboardData(wasteRequests, partners);
-
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(true);
   };
 
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-green-500 rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-white text-xl font-bold">P</span>
-          </div>
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">Dashboard Overview</h2>
-            <p className="text-gray-600 mt-1">Monitor and manage your waste management platform</p>
-          </div>
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Dashboard Overview</h2>
         </div>
-        <button
-          onClick={loadDashboardData}
-          disabled={isLoading}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
-        >
-          <span className="text-lg">🔄</span>
-          <span className="font-medium">{isLoading ? 'Refreshing...' : 'Force Refresh'}</span>
-        </button>
+        <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+        </div>
       </div>
 
       {/* Enhanced Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        {/* Active Users Card */}
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Active Users</h3>
+            <div className="text-2xl">👥</div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600 flex items-center">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                Total Users
+              </span>
+              <span className="font-bold text-green-600 text-2xl">{stats.activeUsers}</span>
+            </div>
+            <div className="mt-4 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
+              <div className="text-xs text-gray-600 text-center">
+                📊 Real-time updates
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Waste Requests Section */}
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
@@ -180,10 +277,10 @@ const AdminDashboardHome: React.FC = () => {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600 flex items-center">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></div>
-                Pending
+                <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                Accepted
               </span>
-              <span className="font-bold text-yellow-600">{stats.pendingRequests}</span>
+              <span className="font-bold text-purple-600">{stats.acceptedRequests}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600 flex items-center">
@@ -240,20 +337,13 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
 
-        {/* Financial & Rewards Section */}
+        {/* Rewards Section */}
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Financial & Rewards</h3>
-            <div className="text-2xl">💰</div>
+            <h3 className="text-lg font-semibold text-gray-900">Rewards</h3>
+            <div className="text-2xl">🎁</div>
           </div>
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600 flex items-center">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                Revenue
-              </span>
-              <span className="font-bold text-green-600">₹{stats.totalRevenue.toLocaleString()}</span>
-            </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600 flex items-center">
                 <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></div>
@@ -282,7 +372,7 @@ const AdminDashboardHome: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Environmental Impact</h3>
-            <div className="text-2xl">🌱</div>
+            <div className="text-2xl flex items-center justify-center">🌱</div>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
@@ -295,7 +385,7 @@ const AdminDashboardHome: React.FC = () => {
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600 flex items-center">
                 <div className="w-2 h-2 bg-teal-500 rounded-full mr-2"></div>
-                CO₂ Reduction
+                <span>CO₂ Reduction</span>
               </span>
               <span className="font-bold text-teal-600">{stats.co2Reduction.toFixed(1)} kg</span>
             </div>

@@ -181,7 +181,12 @@ const AdminDocumentsPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">📄 Document Verification</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-2 text-sm rounded-lg transition-colors ${
@@ -223,6 +228,7 @@ const AdminDocumentsPage: React.FC = () => {
               Rejected ({partners.filter(p => p.verificationStatus === 'rejected').length})
             </button>
           </div>
+        </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

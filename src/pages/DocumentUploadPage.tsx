@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { DocumentType, PartnerDocument } from '../types';
+import { db } from '../config/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import { cloudinaryService } from '../services/cloudinaryService';
+import { emailService } from '../services/emailService';
 
 const DocumentUploadPage: React.FC = () => {
   const { user, partner, refreshPartner } = useAuth();
@@ -13,7 +17,11 @@ const DocumentUploadPage: React.FC = () => {
 
   useEffect(() => {
     if (partner?.documents) {
-      setDocuments(partner.documents);
+      // Filter out any documents with undefined fields
+      const validDocuments = partner.documents.filter(doc => 
+        doc && doc.type && doc.url && doc.uploadedAt && doc.verified
+      );
+      setDocuments(validDocuments);
     }
   }, [partner]);
 
@@ -36,9 +44,9 @@ const DocumentUploadPage: React.FC = () => {
   ];
 
   const handleFileUpload = async (documentType: DocumentType, file: File) => {
-    console.log('Starting demo upload for:', documentType, 'User:', user?.uid);
+    console.log('☁️ Starting Cloudinary upload for:', documentType, 'User:', user?.uid);
     if (!user) {
-      console.error('No user found for upload');
+      console.error('❌ No user found for upload');
       setErrors(prev => ({ ...prev, [documentType]: 'User not authenticated. Please sign in again.' }));
       return;
     }
@@ -46,13 +54,20 @@ const DocumentUploadPage: React.FC = () => {
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      setErrors(prev => ({ ...prev, [documentType]: 'Please upload a valid image (JPG, PNG) or PDF file' }));
+      setErrors(prev => ({ ...prev, [documentType]: 'Only JPG, PNG, and PDF files are allowed' }));
       return;
     }
 
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, [documentType]: 'File size must be less than 5MB' }));
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, [documentType]: 'File size must be less than 10MB' }));
+      return;
+    }
+
+    // Validate file name
+    const fileName = file.name.toLowerCase();
+    if (!/\.(jpg|jpeg|png|pdf)$/.test(fileName)) {
+      setErrors(prev => ({ ...prev, [documentType]: 'Invalid file extension' }));
       return;
     }
 
@@ -61,49 +76,67 @@ const DocumentUploadPage: React.FC = () => {
     setErrors(prev => ({ ...prev, [documentType]: '' }));
 
     try {
-      // Simulate upload progress for demo
-      const simulateUpload = () => {
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += Math.random() * 15 + 5; // Random progress between 5-20%
-          if (progress >= 100) {
-            progress = 100;
-            clearInterval(interval);
+      // Upload to Cloudinary with progress tracking
+      const folder = `partner-documents/${user.uid}`;
+      const downloadURL = await cloudinaryService.uploadFile(
+        file,
+        folder,
+        (progress) => {
+          console.log('📊 Upload progress:', progress.percentage + '%');
+          setUploadProgress(prev => ({ ...prev, [documentType]: progress.percentage }));
+        }
+      );
 
-            // Create document object with blob URL for demo
-            const blobUrl = URL.createObjectURL(file);
-            const newDocument: PartnerDocument = {
-              type: documentType,
-              url: blobUrl,
-              uploadedAt: new Date().toISOString(),
-              verified: 'pending',
-              remarks: undefined
-            };
+      console.log('✅ File uploaded! URL:', downloadURL);
 
-            // Update documents array
-            const updatedDocuments = documents.filter(doc => doc.type !== documentType);
-            updatedDocuments.push(newDocument);
+      if (!downloadURL) {
+        throw new Error('Cloudinary returned empty URL');
+      }
 
-            setDocuments(updatedDocuments);
-            setUploadProgress(prev => ({ ...prev, [documentType]: 100 }));
-
-            // Clear progress after a moment
-            setTimeout(() => {
-              setUploadProgress(prev => ({ ...prev, [documentType]: 0 }));
-              setUploading(prev => ({ ...prev, [documentType]: false }));
-            }, 1000);
-
-          } else {
-            setUploadProgress(prev => ({ ...prev, [documentType]: Math.round(progress) }));
-          }
-        }, 200); // Update every 200ms
+      // Create document object (remove undefined fields)
+      const newDocument: PartnerDocument = {
+        type: documentType,
+        url: downloadURL,
+        uploadedAt: new Date().toISOString(),
+        verified: 'pending'
       };
 
-      simulateUpload();
+      // Update local state - filter existing documents
+      const validExistingDocs = documents.filter(doc => 
+        doc && doc.type !== documentType && doc.url && doc.uploadedAt && doc.verified
+      );
+      const updatedDocuments = [...validExistingDocs, newDocument];
+      setDocuments(updatedDocuments);
 
-    } catch (error) {
-      console.error('Error in demo upload:', error);
-      setErrors(prev => ({ ...prev, [documentType]: 'Failed to upload document. Please try again.' }));
+      // Update Firestore - ensure no undefined values
+      const partnerRef = doc(db, 'partners', user.uid);
+      const cleanDocuments = updatedDocuments.map(doc => {
+        const cleanDoc: any = {
+          type: doc.type,
+          url: doc.url,
+          uploadedAt: doc.uploadedAt,
+          verified: doc.verified
+        };
+        if (doc.remarks) {
+          cleanDoc.remarks = doc.remarks;
+        }
+        return cleanDoc;
+      });
+      
+      console.log('📝 Clean documents to save:', JSON.stringify(cleanDocuments, null, 2));
+      
+      await updateDoc(partnerRef, {
+        documents: cleanDocuments
+      });
+      console.log('✅ Firestore updated with document URL');
+
+      // Refresh partner data
+      await refreshPartner();
+
+      setUploading(prev => ({ ...prev, [documentType]: false }));
+    } catch (error: any) {
+      console.error('❌ Upload error:', error);
+      setErrors(prev => ({ ...prev, [documentType]: error.message || 'Failed to upload document.' }));
       setUploading(prev => ({ ...prev, [documentType]: false }));
     }
   };
@@ -122,10 +155,13 @@ const DocumentUploadPage: React.FC = () => {
     return requiredDocuments.every(doc => getDocumentStatus(doc.type) !== 'not_uploaded');
   };
 
-  const handleSubmitForVerification = () => {
-    if (!user || !isAllDocumentsUploaded()) return;
+  const handleSubmitForVerification = async () => {
+    if (!user || !isAllDocumentsUploaded() || !partner) return;
 
-    // For demo purposes, just navigate to verification pending page
+    // Send email confirmation
+    await emailService.sendDocumentUploadConfirmation(partner.email, partner.name);
+
+    // Navigate to verification pending page
     navigate('/verification-pending');
   };
 
@@ -262,7 +298,7 @@ const DocumentUploadPage: React.FC = () => {
                 )}
 
                 <p className="text-xs text-gray-500 mt-2">
-                  Demo Mode: Documents are stored locally in your browser
+                  Documents are securely stored in Cloudinary (Free CDN)
                 </p>
               </div>
             </div>

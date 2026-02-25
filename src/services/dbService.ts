@@ -5,6 +5,7 @@ import {
   getDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -16,7 +17,19 @@ import { db } from '../config/firebase';
 import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction, Partner, Notification, AuditLog, RewardRule, RewardCampaign } from '../types';
 
 export const dbService = {
-  // Waste Requests
+  async createWasteRequest(request: Omit<WasteRequest, 'id'>) {
+    try {
+      const docRef = await addDoc(collection(db, 'wasteRequests'), {
+        ...request,
+        createdAt: Timestamp.fromDate(new Date(request.createdAt)),
+        date: Timestamp.fromDate(new Date(request.date))
+      });
+      return docRef.id;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   async getWasteRequests(partnerId?: string) {
     try {
       let q;
@@ -30,7 +43,8 @@ export const dbService = {
       return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date,
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
       })) as WasteRequest[];
     } catch (error) {
       throw error;
@@ -385,6 +399,15 @@ export const dbService = {
     }
   },
 
+  async deleteNotification(id: string) {
+    try {
+      const docRef = doc(db, 'notifications', id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      throw error;
+    }
+  },
+
   async createBulkNotifications(notifications: Omit<Notification, 'id'>[]) {
     try {
       const batch = [];
@@ -713,37 +736,65 @@ export const dbService = {
   },
 
   // Real-time listeners
-  subscribeToWasteRequests(callback: (requests: WasteRequest[]) => void) {
-    const q = collection(db, 'wasteRequests');
-    return onSnapshot(q, (querySnapshot) => {
-      const requests = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
-      })) as WasteRequest[];
-      callback(requests);
-    });
-  },
-
   subscribeToWasteRequestsForPartner(partnerId: string, callback: (requests: WasteRequest[]) => void) {
-    console.log('subscribeToWasteRequestsForPartner: Setting up subscription for partner:', partnerId);
-    const q = query(collection(db, 'wasteRequests'), where('partnerId', '==', partnerId));
-    return onSnapshot(q, (querySnapshot) => {
-      console.log('subscribeToWasteRequestsForPartner: Snapshot received, docs count:', querySnapshot.docs.length);
-      const requests = querySnapshot.docs.map(doc => {
-        const data = {
+    console.log('🔍 SUBSCRIPTION START - Partner ID:', partnerId);
+    
+    let assignedRequests: WasteRequest[] = [];
+    let requestedRequests: WasteRequest[] = [];
+    let updateCounter = 0;
+    
+    const mergeAndCallback = () => {
+      updateCounter++;
+      if (updateCounter % 2 === 0) {
+        const allRequests = [...assignedRequests, ...requestedRequests];
+        const uniqueRequests = Array.from(
+          new Map(allRequests.map(req => [req.id, req])).values()
+        );
+        console.log('📊 Total:', uniqueRequests.length, '(assigned:', assignedRequests.length, ', requested:', requestedRequests.length, ')');
+        callback(uniqueRequests);
+      }
+    };
+    
+    const q1 = query(
+      collection(db, 'wasteRequests'), 
+      where('partnerId', '==', partnerId)
+    );
+    
+    const q2 = query(
+      collection(db, 'wasteRequests'),
+      where('status', '==', 'Requested')
+    );
+    
+    const unsubscribe1 = onSnapshot(q1, (querySnapshot) => {
+      assignedRequests = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
           id: doc.id,
-          ...doc.data(),
-          date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+          ...data,
+          date: data.date?.toDate?.()?.toISOString() || data.date,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
         };
-        console.log('subscribeToWasteRequestsForPartner: Processing doc:', data);
-        return data;
       }) as WasteRequest[];
-      console.log('subscribeToWasteRequestsForPartner: Final requests for partner', partnerId, ':', requests);
-      callback(requests);
-    }, (error) => {
-      console.error('subscribeToWasteRequestsForPartner: Error in subscription:', error);
+      mergeAndCallback();
     });
+    
+    const unsubscribe2 = onSnapshot(q2, (querySnapshot) => {
+      requestedRequests = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date?.toDate?.()?.toISOString() || data.date,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
+        };
+      }) as WasteRequest[];
+      mergeAndCallback();
+    });
+    
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+    };
   },
 
   subscribeToPartners(callback: (partners: Partner[]) => void) {
@@ -800,6 +851,254 @@ export const dbService = {
         createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
       })) as Voucher[];
       callback(vouchers);
+    });
+  },
+
+  // Subscribe to reward transactions for a specific partner
+  listenToRewardTransactions(partnerId: string, callback: (transactions: RewardTransaction[]) => void) {
+    const q = query(
+      collection(db, 'rewardTransactions'),
+      where('partnerId', '==', partnerId),
+      orderBy('date', 'desc')
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const transactions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+      })) as RewardTransaction[];
+      callback(transactions);
+    });
+  },
+
+  // Subscribe to ALL reward transactions (admin)
+  subscribeToRewardTransactions(callback: (transactions: RewardTransaction[]) => void) {
+    const q = query(
+      collection(db, 'rewardTransactions'),
+      orderBy('date', 'desc')
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const transactions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+      })) as RewardTransaction[];
+      callback(transactions);
+    });
+  },
+
+  async createRewardTransaction(transaction: Omit<RewardTransaction, 'id'>) {
+    try {
+      const docRef = await addDoc(collection(db, 'rewardTransactions'), {
+        ...transaction,
+        date: Timestamp.fromDate(new Date(transaction.date)),
+        createdAt: Timestamp.now(),
+      });
+      return docRef.id;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async updatePartnerRewardPoints(partnerId: string, points: number) {
+    try {
+      const docRef = doc(db, 'partners', partnerId);
+      await updateDoc(docRef, {
+        rewardPoints: points,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  subscribeToPartnerNotifications(partnerId: string, callback: (notifications: any[]) => void) {
+    const q = query(
+      collection(db, 'notifications'),
+      where('partnerId', '==', partnerId)
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const notifications = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt,
+        sentAt: doc.data().sentAt?.toDate?.()?.toISOString() || doc.data().sentAt,
+        readAt: doc.data().readAt?.toDate?.()?.toISOString() || doc.data().readAt
+      })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(notifications);
+    });
+  },
+
+  subscribeToNotifications(callback: (notifications: Notification[]) => void) {
+    const q = query(
+      collection(db, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      limit(500)
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const notifications = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt,
+        sentAt: doc.data().sentAt?.toDate?.()?.toISOString() || doc.data().sentAt,
+        readAt: doc.data().readAt?.toDate?.()?.toISOString() || doc.data().readAt
+      })) as Notification[];
+      callback(notifications);
+    });
+  },
+
+  async createScheduledPickup(pickup: any) {
+    try {
+      const docRef = await addDoc(collection(db, 'scheduledPickups'), {
+        ...pickup,
+        createdAt: Timestamp.now()
+      });
+      return docRef.id;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async deleteScheduledPickup(id: string) {
+    try {
+      const docRef = doc(db, 'scheduledPickups', id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  subscribeToScheduledPickups(partnerId: string, callback: (pickups: any[]) => void) {
+    const q = query(
+      collection(db, 'scheduledPickups'),
+      where('partnerId', '==', partnerId)
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const pickups = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
+      })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      callback(pickups);
+    });
+  },
+
+  // Subscribe to ALL scheduled pickups (admin view - shows schedules created by partners)
+  subscribeToAllScheduledPickups(callback: (pickups: any[]) => void) {
+    const q = query(
+      collection(db, 'scheduledPickups'),
+      orderBy('date', 'desc')
+    );
+    return onSnapshot(q, (querySnapshot) => {
+      const pickups = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
+      }));
+      callback(pickups);
+    });
+  },
+
+  // Subscription Plans
+  async createSubscriptionPlan(plan: Omit<SubscriptionPlan, 'id'>) {
+    try {
+      const docRef = await addDoc(collection(db, 'subscriptionPlans'), {
+        ...plan,
+        createdAt: Timestamp.now(),
+      });
+      return docRef.id;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async getSubscriptionPlans() {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'subscriptionPlans'));
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SubscriptionPlan[];
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  subscribeToSubscriptionPlans(callback: (plans: SubscriptionPlan[]) => void) {
+    const q = collection(db, 'subscriptionPlans');
+    return onSnapshot(q, (querySnapshot) => {
+      const plans = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SubscriptionPlan[];
+      callback(plans);
+    });
+  },
+
+  async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>) {
+    try {
+      const docRef = doc(db, 'subscriptionPlans', id);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async deleteSubscriptionPlan(id: string) {
+    try {
+      const docRef = doc(db, 'subscriptionPlans', id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Subscribe to all waste requests (admin)
+  async createUser(userId: string, userData: any) {
+    try {
+      const docRef = doc(db, 'users', userId);
+      await updateDoc(docRef, {
+        ...userData,
+        createdAt: Timestamp.now(),
+      });
+    } catch (error) {
+      // If document doesn't exist, create it
+      const docRef = doc(db, 'users', userId);
+      await addDoc(collection(db, 'users'), {
+        ...userData,
+        createdAt: Timestamp.now(),
+      });
+    }
+  },
+
+  async updateUser(userId: string, updates: any) {
+    try {
+      const docRef = doc(db, 'users', userId);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  subscribeToWasteRequests(callback: (requests: WasteRequest[]) => void) {
+    const q = collection(db, 'wasteRequests');
+    return onSnapshot(q, (querySnapshot) => {
+      const requests = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date?.toDate?.()?.toISOString() || data.date,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
+        };
+      }) as WasteRequest[];
+      callback(requests);
     });
   },
 };

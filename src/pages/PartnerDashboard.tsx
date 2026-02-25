@@ -1,23 +1,58 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { dbService } from '../services/dbService';
 
 const PartnerDashboard: React.FC = () => {
   const location = useLocation();
   const { user, partner, loading } = useAuth();
+  const [loadTimeout, setLoadTimeout] = React.useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Check for demo authentication
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading || (user && !partner)) {
+        setLoadTimeout(true);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [loading, user, partner]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsubscribe = dbService.subscribeToPartnerNotifications(user.uid, (notifications) => {
+      const unread = notifications.filter(n => !n.readAt).length;
+      setUnreadCount(unread);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
   const demoAuth = localStorage.getItem('partnerAuth');
   const demoPartner = localStorage.getItem('demoPartner');
   const isAuthenticated = user || demoAuth;
   const currentPartner = partner || (demoPartner ? JSON.parse(demoPartner) : null);
 
-  // Redirect to login if not authenticated
   if (!loading && !isAuthenticated) {
     return <Navigate to="/signin" replace />;
   }
 
-  // Show loading state while auth is loading OR while partner data is being fetched
+  if (loadTimeout && !currentPartner) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading Issue</h1>
+          <p className="text-gray-600 mb-4">Unable to load partner data. Please try again.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading || (isAuthenticated && !currentPartner)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -29,7 +64,6 @@ const PartnerDashboard: React.FC = () => {
     );
   }
 
-  // Check partner status and subscription - only after partner data is loaded
   if (currentPartner?.verificationStatus === 'pending') {
     return <Navigate to="/verification-pending" replace />;
   }
@@ -58,13 +92,29 @@ const PartnerDashboard: React.FC = () => {
   const partnerName = currentPartner?.name || 'Partner';
   const partnerEmail = currentPartner?.email || 'partner@example.com';
 
+  if (!currentPartner) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Partner Data Not Found</h1>
+          <p className="text-gray-600 mb-4">Unable to load partner information.</p>
+          <button
+            onClick={() => window.location.href = '/signin'}
+            className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
     { name: 'Waste Requests', href: '/dashboard/requests', icon: '📦' },
     { name: 'Location & Routes', href: '/dashboard/location-routes', icon: '📍' },
     { name: 'Pickup History', href: '/dashboard/history', icon: '📋' },
     { name: 'Impact & Analytics', href: '/dashboard/analytics', icon: '📊' },
-    { name: 'Rewards', href: '/dashboard/rewards', icon: '🎁' },
     { name: 'Notifications', href: '/dashboard/notifications', icon: '🔔' },
     { name: 'Profile', href: '/dashboard/profile', icon: '👤' },
   ];
@@ -91,6 +141,11 @@ const PartnerDashboard: React.FC = () => {
               >
                 <span className="mr-3 text-lg">{item.icon}</span>
                 {item.name}
+                {item.name === 'Notifications' && unreadCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

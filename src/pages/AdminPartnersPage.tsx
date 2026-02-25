@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { Partner } from '../types';
+import { useAuth } from '../hooks/useAuth';
+import { emailService } from '../services/emailService';
+import ConfirmDialog from '../components/ConfirmDialog';
+import UndoNotification from '../components/UndoNotification';
+import { useUndo } from '../hooks/useUndo';
 
 const AdminPartnersPage: React.FC = () => {
+  const { admin } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
@@ -10,19 +16,35 @@ const AdminPartnersPage: React.FC = () => {
   const [showPerformanceModal, setShowPerformanceModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [updatedPartners, setUpdatedPartners] = useState<Set<string>>(new Set());
+  const [wasteRequests, setWasteRequests] = useState<any[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    partnerId: string;
+    newStatus: string;
+    partnerName: string;
+  }>({ isOpen: false, partnerId: '', newStatus: '', partnerName: '' });
+  const { isUndoVisible, undoMessage, showUndo, executeUndo, dismissUndo } = useUndo();
 
   useEffect(() => {
     // Set up real-time listener for partners
-    const unsubscribe = dbService.subscribeToPartners((partnersList) => {
+    const unsubscribePartners = dbService.subscribeToPartners((partnersList) => {
       setPartners(partnersList);
       setLoading(false);
+    });
+
+    // Set up real-time listener for waste requests
+    const unsubscribeRequests = dbService.subscribeToWasteRequests((requests) => {
+      setWasteRequests(requests);
     });
 
     // Initial load
     loadPartners();
 
-    // Cleanup listener on unmount
-    return () => unsubscribe();
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribePartners();
+      unsubscribeRequests();
+    };
   }, []);
 
   const loadPartners = async () => {
@@ -37,13 +59,71 @@ const AdminPartnersPage: React.FC = () => {
     }
   };
 
-  const handleStatusUpdate = async (partnerId: string, newStatus: string) => {
+  const handleStatusUpdateRequest = (partnerId: string, newStatus: string) => {
+    const partner = partners.find(p => p.id === partnerId);
+    if (!partner) return;
+
+    setConfirmDialog({
+      isOpen: true,
+      partnerId,
+      newStatus,
+      partnerName: partner.name
+    });
+  };
+
+  const handleStatusUpdate = async () => {
+    const { partnerId, newStatus } = confirmDialog;
+    setConfirmDialog({ isOpen: false, partnerId: '', newStatus: '', partnerName: '' });
+
     try {
+      const partner = partners.find(p => p.id === partnerId);
+      const previousStatus = partner?.verificationStatus;
+      
       await dbService.updatePartner(partnerId, { verificationStatus: newStatus as Partner['verificationStatus'] });
+      
       setPartners(partners.map(p =>
         p.id === partnerId ? { ...p, verificationStatus: newStatus as Partner['verificationStatus'] } : p
       ));
       setUpdatedPartners(prev => new Set(prev).add(partnerId));
+      
+      // Create audit log
+      await dbService.createAuditLog({
+        adminId: admin?.id || 'unknown',
+        adminName: admin?.name || 'Admin User',
+        action: `Partner Verification ${newStatus === 'approved' ? 'Approved' : newStatus === 'rejected' ? 'Rejected' : 'Updated'}`,
+        actionType: 'verify',
+        details: `Changed partner verification status from ${previousStatus} to ${newStatus} for ${partner?.name}`,
+        timestamp: new Date().toISOString(),
+        entityType: 'partner',
+        entityId: partnerId,
+        previousValue: { verificationStatus: previousStatus },
+        newValue: { verificationStatus: newStatus },
+        metadata: {
+          partnerId,
+          partnerName: partner?.name,
+          partnerEmail: partner?.email
+        }
+      });
+
+      // Send email notification
+      if (partner) {
+        if (newStatus === 'approved') {
+          await emailService.sendVerificationApproved(partner.email, partner.name);
+        } else if (newStatus === 'rejected') {
+          await emailService.sendVerificationRejected(partner.email, partner.name);
+        }
+      }
+
+      // Show undo notification
+      showUndo(
+        async () => {
+          await dbService.updatePartner(partnerId, { verificationStatus: previousStatus as Partner['verificationStatus'] });
+          setPartners(partners.map(p =>
+            p.id === partnerId ? { ...p, verificationStatus: previousStatus as Partner['verificationStatus'] } : p
+          ));
+        },
+        `Partner status changed to ${newStatus === 'approved' ? 'Verified' : 'Rejected'}`
+      );
     } catch (error) {
       console.error('Error updating partner status:', error);
     }
@@ -76,23 +156,36 @@ const AdminPartnersPage: React.FC = () => {
   });
 
   const getPartnerPerformance = (partner: Partner) => {
-    // Mock performance data - in real app, this would come from database
+    // Calculate real performance data from waste requests
+    const partnerRequests = wasteRequests.filter(r => r.partnerId === partner.id);
+    const completedRequests = partnerRequests.filter(r => r.status === 'Completed' || r.status === 'completed').length;
+    const totalRequests = partnerRequests.length;
+    const successRate = totalRequests > 0 ? Math.round((completedRequests / totalRequests) * 100) : 0;
+    
+    // Calculate waste processed (estimate from quantity strings)
+    const totalWasteProcessed = completedRequests * 15; // Estimate 15kg per completed request
+    const co2Reduction = totalWasteProcessed * 0.25; // 0.25kg CO2 per kg waste
+    
     return {
-      totalRequests: 45,
-      completedRequests: 42,
-      successRate: 93,
-      averageRating: 4.7,
-      totalWasteProcessed: 1250, // kg
-      co2Reduction: 312.5 // kg
+      totalRequests,
+      completedRequests,
+      successRate,
+      averageRating: 4.5, // Default rating until rating system is implemented
+      totalWasteProcessed,
+      co2Reduction
     };
   };
 
   const getPartnerSubscription = (partner: Partner) => {
+    const expiry = partner.subscription?.expiryDate 
+      ? new Date(partner.subscription.expiryDate).toLocaleDateString()
+      : 'N/A';
+    
     return {
       status: partner.subscription?.status || 'none',
-      expiry: partner.subscription?.expiryDate || 'N/A',
+      expiry,
       totalEarned: partner.rewardPoints || 0,
-      redeemedVouchers: 8
+      redeemedVouchers: 0 // Will be calculated from reward transactions when implemented
     };
   };
 
@@ -111,7 +204,12 @@ const AdminPartnersPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">🧑‍🤝‍🧑 Partner Management</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-2 text-sm rounded-lg transition-colors ${
@@ -153,6 +251,7 @@ const AdminPartnersPage: React.FC = () => {
               Rejected ({partners.filter(p => p.verificationStatus === 'rejected').length})
             </button>
           </div>
+        </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -256,10 +355,9 @@ const AdminPartnersPage: React.FC = () => {
                   </label>
                   <select
                     value={partner.verificationStatus}
-                    onChange={(e) => handleStatusUpdate(partner.id, e.target.value)}
+                    onChange={(e) => handleStatusUpdateRequest(partner.id, e.target.value)}
                     className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="pending">Pending Verification</option>
                     <option value="approved">Verified</option>
                     <option value="rejected">Rejected</option>
                   </select>
@@ -394,14 +492,7 @@ const AdminPartnersPage: React.FC = () => {
                             <div className="text-sm text-purple-700">Vouchers Redeemed</div>
                           </div>
                         </div>
-                        <div className="bg-yellow-50 p-4 rounded-lg">
-                          <h5 className="font-medium text-yellow-800 mb-2">Recent Activity</h5>
-                          <div className="space-y-2 text-sm text-yellow-700">
-                            <div>• Completed waste pickup (+25 points)</div>
-                            <div>• Redeemed ₹500 voucher (-100 points)</div>
-                            <div>• Monthly subscription renewed (+50 points)</div>
-                          </div>
-                        </div>
+
                       </>
                     );
                   })()}
@@ -410,6 +501,26 @@ const AdminPartnersPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          title="Confirm Status Change"
+          message={`Are you sure you want to change ${confirmDialog.partnerName}'s status to ${confirmDialog.newStatus === 'approved' ? 'Verified' : 'Rejected'}? This will send an email notification to the partner.`}
+          confirmText="Yes, Change Status"
+          cancelText="Cancel"
+          onConfirm={handleStatusUpdate}
+          onCancel={() => setConfirmDialog({ isOpen: false, partnerId: '', newStatus: '', partnerName: '' })}
+          type={confirmDialog.newStatus === 'rejected' ? 'danger' : 'warning'}
+        />
+
+        {/* Undo Notification */}
+        <UndoNotification
+          isVisible={isUndoVisible}
+          message={undoMessage}
+          onUndo={executeUndo}
+          onDismiss={dismissUndo}
+        />
       </div>
     </div>
   );

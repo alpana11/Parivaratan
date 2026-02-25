@@ -1,29 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { dbService } from '../services/dbService';
+import { useWasteRequests } from '../hooks/useData';
 
 const NotificationsPage: React.FC = () => {
+  const { partner } = useAuth();
+  const { streamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [updateCount, setUpdateCount] = useState(0);
+  const [prevCount, setPrevCount] = useState(0);
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
+  useEffect(() => {
+    if (!partner?.id) return;
+
+    // Direct Firebase listener
+    const unsubscribe = dbService.subscribeToPartnerNotifications(partner.id, (data) => {
+      const unreadCount = data.filter(n => !n.readAt).length;
+      
+      // Play sound if new unread notification
+      if (unreadCount > prevCount) {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+        audio.play().catch(e => console.log('Audio play failed:', e));
+      }
+      
+      setPrevCount(unreadCount);
+      setNotifications(data);
+      setUpdateCount(prev => prev + 1);
+    });
+
+    return () => unsubscribe();
+  }, [partner, prevCount]);
+
+  const markAsRead = async (id: string) => {
+    try {
+      await dbService.markNotificationAsRead(id);
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === id ? { ...notif, readAt: new Date().toISOString() } : notif
+        )
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notif => ({ ...notif, read: true }))
-    );
+  const markAllAsRead = async () => {
+    try {
+      const unreadIds = notifications.filter(n => !n.readAt).map(n => n.id);
+      await Promise.all(unreadIds.map(id => dbService.markNotificationAsRead(id)));
+      setNotifications(prev =>
+        prev.map(notif => ({ ...notif, readAt: new Date().toISOString() }))
+      );
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.readAt).length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+            {streamActive && (
+              <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="text-xs text-green-700 font-medium">Pathway Live • {pathwayUpdateCount}</span>
+              </div>
+            )}
+          </div>
           <p className="text-gray-600">Stay updated with your activities and system messages</p>
         </div>
         {unreadCount > 0 && (
@@ -97,18 +144,18 @@ const NotificationsPage: React.FC = () => {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`border rounded-lg p-4 ${!notification.read ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}
+                  className={`border rounded-lg p-4 ${!notification.readAt ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className={`text-sm ${!notification.read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                      <p className={`text-sm ${!notification.readAt ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
                         {notification.message}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {new Date(notification.date).toLocaleDateString()} at {new Date(notification.date).toLocaleTimeString()}
+                        {new Date(notification.createdAt).toLocaleDateString()} at {new Date(notification.createdAt).toLocaleTimeString()}
                       </p>
                     </div>
-                    {!notification.read && (
+                    {!notification.readAt && (
                       <button
                         onClick={() => markAsRead(notification.id)}
                         className="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium"
