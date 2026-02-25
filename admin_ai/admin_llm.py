@@ -1,7 +1,9 @@
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
 
-# Paste your AI Studio API key inside quotes
-genai.configure(api_key="AIzaSyCwjyK7bBgPRfCeKUy9so_GpIVWBlQfc7E")
+load_dotenv()
+genai.configure(api_key=os.getenv('VITE_GEMINI_API_KEY'))
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
