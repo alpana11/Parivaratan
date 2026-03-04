@@ -40,7 +40,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
       // Update local state immediately
       setLocalRequests(prev => prev.map(r => 
         r.id === requestToSchedule 
-          ? { ...r, scheduleMethod: scheduleData.method, scheduledDate: scheduleData.date, scheduledTime: scheduleData.time }
+          ? { ...r, scheduleMethod: scheduleData.method, scheduledDate: scheduleData.date, scheduledTime: scheduleData.time, status: 'In Progress' }
           : r
       ));
 
@@ -50,13 +50,16 @@ const AssignedWasteRequestsPage: React.FC = () => {
       await dbService.updateWasteRequest(requestToSchedule, {
         scheduleMethod: scheduleData.method,
         scheduledDate: scheduleData.date,
-        scheduledTime: scheduleData.time
+        scheduledTime: scheduleData.time,
+        status: 'In Progress'
       });
 
       await dbService.createScheduledPickup({
         partnerId: user.uid,
         requestId: requestToSchedule,
         type: request.type,
+        image: (request as any).imageUrl || request.image,
+        imageUrl: (request as any).imageUrl || request.image,
         userName: (request as any).userName || 'User',
         phoneNumber: request.phoneNumber || (request as any).userPhone || 'N/A',
         location: typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', '),
@@ -69,7 +72,6 @@ const AssignedWasteRequestsPage: React.FC = () => {
         status: 'scheduled'
       });
 
-      // Send notification to user - try multiple userId field names
       const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
       if (userId) {
         await dbService.createNotification({
@@ -90,6 +92,54 @@ const AssignedWasteRequestsPage: React.FC = () => {
       alert('Failed to schedule pickup');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleSendAvailabilityConfirmation = async (requestId: string, scheduledDate: string, scheduledTime: string) => {
+    if (!user || !partner) return;
+
+    try {
+      const request = requests.find(r => r.id === requestId);
+      if (!request) {
+        alert('Request not found');
+        return;
+      }
+
+      const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
+      const userPhone = request.phoneNumber || (request as any).userPhone || 'N/A';
+      
+      if (!userId) {
+        alert('User information not found');
+        return;
+      }
+
+      const pickupDateTime = new Date(`${scheduledDate}T${scheduledTime.split('-')[0]}`);
+      const now = new Date();
+      const hoursUntilPickup = (pickupDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilPickup > 12) {
+        const confirmSend = window.confirm(
+          `Pickup is scheduled in ${Math.round(hoursUntilPickup)} hours. ` +
+          `It's recommended to ask 12 hours before pickup. ` +
+          `Do you want to ask the user now anyway?`
+        );
+        if (!confirmSend) return;
+      }
+
+      await dbService.sendAvailabilityConfirmation(
+        requestId,
+        user.uid,
+        userId,
+        scheduledDate,
+        scheduledTime,
+        partner.name,
+        userPhone
+      );
+
+      alert('✅ Availability question sent to user! They will receive a notification to confirm or decline.');
+    } catch (error) {
+      console.error('Error sending availability question:', error);
+      alert('Failed to send question to user');
     }
   };
 
@@ -373,7 +423,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
                             Schedule Pickup
                           </button>
                         )}
-                        {request.status === 'accepted' && (
+                        {(request.status === 'accepted' || request.status === 'In Progress') && (
                           <button
                             onClick={() => handleUpdateStatus(request.id)}
                             className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"

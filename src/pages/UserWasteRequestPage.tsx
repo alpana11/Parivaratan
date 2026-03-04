@@ -67,6 +67,32 @@ const UserWasteRequestPage: React.FC = () => {
       const requestId = await dbService.createWasteRequest(wasteRequest);
       console.log('✅ REQUEST CREATED WITH ID:', requestId, 'ASSIGNED TO PARTNER:', selectedPartnerId);
       
+      // Award points to user for submitting waste request
+      const pointsEarned = 10; // Base points for submitting request
+      const userId = 'user-123'; // Replace with actual user ID from auth
+      
+      try {
+        const user = await dbService.getUser(userId);
+        if (user) {
+          const newPoints = (user.rewardPoints || 0) + pointsEarned;
+          await dbService.updateUserRewardPoints(userId, newPoints);
+          
+          // Create reward transaction
+          await dbService.addRewardTransaction({
+            userId,
+            type: 'earned',
+            points: pointsEarned,
+            description: `Submitted ${wasteRequest.type} waste request`,
+            date: new Date().toISOString(),
+            wasteRequestId: requestId
+          });
+          
+          console.log('✅ USER EARNED', pointsEarned, 'POINTS');
+        }
+      } catch (error) {
+        console.error('Error awarding points:', error);
+      }
+      
       await dbService.createNotification({
         type: 'waste_request',
         message: `New waste request: ${wasteRequest.type} (${wasteRequest.quantity}) at ${wasteRequest.location}`,
@@ -74,7 +100,7 @@ const UserWasteRequestPage: React.FC = () => {
         status: 'pending'
       });
       
-      alert('Waste request submitted successfully!');
+      alert(`Waste request submitted successfully! You earned ${pointsEarned} points!`);
       
       // Reset form
       setFormData({

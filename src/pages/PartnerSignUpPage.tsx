@@ -365,7 +365,7 @@ const PartnerSignUpPage: React.FC = () => {
                       What type of waste can you handle? *
                     </label>
                     <div className="mt-1 grid grid-cols-2 gap-3">
-                      {['Plastic', 'Metal', 'Cloth / Textile', 'Paper', 'E-waste', 'Glass'].map((wasteType) => (
+                      {['Plastic', 'Metal', 'Cloth / Textile', 'Paper', 'Cardboard', 'Glass'].map((wasteType) => (
                         <label key={wasteType} className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer transition-all duration-200">
                           <input
                             type="checkbox"

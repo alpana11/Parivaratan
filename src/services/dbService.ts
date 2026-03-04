@@ -11,7 +11,8 @@ import {
   orderBy,
   limit,
   Timestamp,
-  onSnapshot
+  onSnapshot,
+  increment
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction, Partner, Notification, AuditLog, RewardRule, RewardCampaign } from '../types';
@@ -54,11 +55,81 @@ export const dbService = {
   async updateWasteRequest(id: string, updates: Partial<WasteRequest>) {
     try {
       const docRef = doc(db, 'wasteRequests', id);
+      
+      // If marking as completed, calculate and set ecoPointsAwarded, then increment user's ecoPoints
+      if (updates.status === 'Completed') {
+        console.log('🎯 Marking request as Completed...');
+        const requestDoc = await getDoc(docRef);
+        const requestData = requestDoc.data();
+        
+        const userId = requestData?.userId;
+        const wasteType = requestData?.type;
+        const quantityStr = requestData?.quantity || '0';
+        const quantity = parseFloat(quantityStr.toString().replace(/[^0-9.]/g, '')) || 0;
+        
+        let ecoPointsAwarded = requestData?.ecoPointsAwarded;
+        
+        // If ecoPointsAwarded doesn't exist, calculate it from rewardRules
+        if (!ecoPointsAwarded && wasteType) {
+          console.log('⚙️ Calculating ecoPoints from rewardRules...');
+          try {
+            const rulesQuery = query(
+              collection(db, 'rewardRules'),
+              where('wasteType', '==', wasteType),
+              where('isActive', '==', true)
+            );
+            const rulesSnapshot = await getDocs(rulesQuery);
+            
+            if (!rulesSnapshot.empty) {
+              const rule = rulesSnapshot.docs[0].data();
+              const pointsPerKg = rule.pointsPerKg || 0;
+              ecoPointsAwarded = Math.round(quantity * pointsPerKg);
+              console.log(`📊 Calculated: ${quantity}kg × ${pointsPerKg} points/kg = ${ecoPointsAwarded} points`);
+            } else {
+              ecoPointsAwarded = 10; // Default if no rule found
+              console.log('⚠️ No reward rule found, using default: 10 points');
+            }
+          } catch (error) {
+            console.error('❌ Error fetching reward rules:', error);
+            ecoPointsAwarded = 10; // Fallback
+          }
+          
+          // Set ecoPointsAwarded in the waste request
+          await updateDoc(docRef, {
+            ecoPointsAwarded: ecoPointsAwarded
+          });
+        }
+        
+        console.log('userId:', userId);
+        console.log('ecoPointsAwarded:', ecoPointsAwarded);
+
+        if (userId && ecoPointsAwarded) {
+          console.log(`✅ Incrementing ${ecoPointsAwarded} ecoPoints for user ${userId}`);
+          const userRef = doc(db, 'users', userId);
+          
+          try {
+            await updateDoc(userRef, {
+              ecoPoints: increment(ecoPointsAwarded)
+            });
+            console.log('✅ EcoPoints incremented successfully!');
+          } catch (error) {
+            console.error('❌ Firestore permission error or user not found:', error);
+            throw error;
+          }
+        } else {
+          console.warn('⚠️ Missing data - cannot increment ecoPoints:', { userId, ecoPointsAwarded });
+        }
+      }
+      
+      // Then update the waste request status
       await updateDoc(docRef, {
         ...updates,
         updatedAt: Timestamp.now(),
       });
+      
+      console.log('✅ Waste request updated successfully');
     } catch (error) {
+      console.error('❌ Error in updateWasteRequest:', error);
       throw error;
     }
   },
@@ -258,13 +329,20 @@ export const dbService = {
   },
 
   // Reward Transactions
-  async getRewardTransactions(partnerId?: string) {
+  async getRewardTransactions(partnerId?: string, userId?: string) {
     try {
       let q;
       if (partnerId) {
         q = query(
           collection(db, 'rewardTransactions'),
           where('partnerId', '==', partnerId),
+          orderBy('date', 'desc'),
+          limit(50)
+        );
+      } else if (userId) {
+        q = query(
+          collection(db, 'rewardTransactions'),
+          where('userId', '==', userId),
           orderBy('date', 'desc'),
           limit(50)
         );
@@ -369,6 +447,44 @@ export const dbService = {
         status: notification.status || 'pending'
       });
       return docRef.id;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async sendAvailabilityConfirmation(requestId: string, partnerId: string, userId: string, pickupDate: string, pickupTime: string, partnerName: string, userPhone: string) {
+    try {
+      const notificationId = await this.createNotification({
+        userId,
+        partnerId,
+        type: 'availability_confirmation',
+        category: 'availability_check',
+        title: 'Are you available for pickup?',
+        message: `${partnerName} is asking: Will you be available for waste pickup on ${new Date(pickupDate).toLocaleDateString()} at ${pickupTime}? Please confirm or decline.`,
+        priority: 'high',
+        status: 'sent',
+        metadata: {
+          wasteRequestId: requestId,
+          pickupDate,
+          pickupTime,
+          userPhone,
+          requiresResponse: true
+        }
+      });
+      return notificationId;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async respondToAvailabilityConfirmation(notificationId: string, response: 'confirmed' | 'declined') {
+    try {
+      const docRef = doc(db, 'notifications', notificationId);
+      await updateDoc(docRef, {
+        status: response,
+        respondedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
     } catch (error) {
       throw error;
     }
@@ -1079,6 +1195,31 @@ export const dbService = {
       const docRef = doc(db, 'users', userId);
       await updateDoc(docRef, {
         ...updates,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async getUser(userId: string) {
+    try {
+      const docRef = doc(db, 'users', userId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+      }
+      return null;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async updateUserRewardPoints(userId: string, points: number) {
+    try {
+      const docRef = doc(db, 'users', userId);
+      await updateDoc(docRef, {
+        rewardPoints: points,
         updatedAt: Timestamp.now(),
       });
     } catch (error) {

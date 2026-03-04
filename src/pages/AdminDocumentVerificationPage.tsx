@@ -23,69 +23,94 @@ const AdminDocumentVerificationPage: React.FC = () => {
   const handleApproveAllDocuments = async (partnerId: string) => {
     try {
       const partner = partners.find(p => p.id === partnerId);
-      if (!partner) return;
+      if (!partner || !partner.documents || !Array.isArray(partner.documents) || partner.documents.length === 0) {
+        alert('No documents found to approve');
+        return;
+      }
 
-      const updatedDocs = partner.documents.map(doc => ({
-        ...doc,
-        verified: 'approved' as const,
-        remarks: remarks || undefined
-      }));
+      const updatedDocs = partner.documents.map(doc => {
+        const newDoc: any = {
+          ...doc,
+          verified: 'approved' as const
+        };
+        if (remarks) {
+          newDoc.remarks = remarks;
+        }
+        return newDoc;
+      });
+
+      // Update local state immediately
+      setPartners(prev => prev.map(p =>
+        p.id === partnerId ? { ...p, documents: updatedDocs } : p
+      ));
+      if (selectedPartner?.id === partnerId) {
+        setSelectedPartner({ ...selectedPartner, documents: updatedDocs });
+      }
 
       await updateDoc(doc(db, 'partners', partnerId), {
         documents: updatedDocs
       });
 
-      setPartners(prev => prev.map(p =>
-        p.id === partnerId ? { ...p, documents: updatedDocs } : p
-      ));
-
-      if (selectedPartner?.id === partnerId) {
-        setSelectedPartner({ ...selectedPartner, documents: updatedDocs });
-      }
-
       setRemarks('');
       alert('All documents approved!');
     } catch (error) {
       console.error('Error approving documents:', error);
-      alert('Failed to approve documents');
+      alert('Failed to approve documents: ' + (error as Error).message);
     }
   };
 
   const handleRejectAllDocuments = async (partnerId: string) => {
     try {
       const partner = partners.find(p => p.id === partnerId);
-      if (!partner) return;
+      if (!partner || !partner.documents || !Array.isArray(partner.documents) || partner.documents.length === 0) {
+        alert('No documents found to reject');
+        return;
+      }
 
-      const updatedDocs = partner.documents.map(doc => ({
-        ...doc,
-        verified: 'rejected' as const,
-        remarks: remarks || undefined
-      }));
+      const updatedDocs = partner.documents.map(doc => {
+        const newDoc: any = {
+          ...doc,
+          verified: 'rejected' as const
+        };
+        if (remarks) {
+          newDoc.remarks = remarks;
+        }
+        return newDoc;
+      });
+
+      // Update local state immediately
+      setPartners(prev => prev.map(p =>
+        p.id === partnerId ? { ...p, documents: updatedDocs } : p
+      ));
+      if (selectedPartner?.id === partnerId) {
+        setSelectedPartner({ ...selectedPartner, documents: updatedDocs });
+      }
 
       await updateDoc(doc(db, 'partners', partnerId), {
         documents: updatedDocs
       });
 
-      setPartners(prev => prev.map(p =>
-        p.id === partnerId ? { ...p, documents: updatedDocs } : p
-      ));
-
-      if (selectedPartner?.id === partnerId) {
-        setSelectedPartner({ ...selectedPartner, documents: updatedDocs });
-      }
-
       setRemarks('');
       alert('All documents rejected!');
     } catch (error) {
       console.error('Error rejecting documents:', error);
-      alert('Failed to reject documents');
+      alert('Failed to reject documents: ' + (error as Error).message);
     }
   };
 
   const handlePartnerVerification = async (partnerId: string, action: 'approved' | 'rejected') => {
     try {
+      // Update local state immediately
+      setPartners(prev => prev.map(p =>
+        p.id === partnerId ? { ...p, verificationStatus: action, status: action === 'approved' ? 'verified' : 'rejected' } : p
+      ));
+      if (selectedPartner?.id === partnerId) {
+        setSelectedPartner({ ...selectedPartner, verificationStatus: action, status: action === 'approved' ? 'verified' : 'rejected' });
+      }
+
       await updateDoc(doc(db, 'partners', partnerId), {
-        verificationStatus: action
+        verificationStatus: action,
+        status: action === 'approved' ? 'verified' : 'rejected'
       });
       alert(`Partner ${action}!`);
     } catch (error) {
@@ -190,6 +215,11 @@ const AdminDocumentVerificationPage: React.FC = () => {
                     <p className="text-xs text-gray-400">
                       Documents: {partner.documents?.length || 0} | Email: {partner.email}
                     </p>
+                    {partner.registrationDate && (
+                      <p className="text-xs text-gray-400">
+                        Registered: {new Date(partner.registrationDate).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -204,13 +234,23 @@ const AdminDocumentVerificationPage: React.FC = () => {
                   <div>
                     <h2 className="text-2xl font-bold">{selectedPartner.name}</h2>
                     <p className="text-gray-600">{selectedPartner.organization}</p>
-                    <p className="text-sm text-gray-500">
-                      {selectedPartner.partnerType} • Registered: {new Date(selectedPartner.registrationDate).toLocaleDateString()}
-                    </p>
+                    {selectedPartner.registrationDate && (
+                      <p className="text-sm text-gray-500">
+                        {selectedPartner.partnerType} • Registered: {new Date(selectedPartner.registrationDate).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
-                  <span className={`px-3 py-1 rounded-full ${getStatusColor(selectedPartner.verificationStatus || 'pending')}`}>
-                    {selectedPartner.verificationStatus || 'pending'}
-                  </span>
+                  <div className="flex items-center space-x-3">
+                    <span className={`px-3 py-1 rounded-full ${getStatusColor(selectedPartner.verificationStatus || 'pending')}`}>
+                      {selectedPartner.verificationStatus || 'pending'}
+                    </span>
+                    <button
+                      onClick={() => setSelectedPartner(null)}
+                      className="text-gray-400 hover:text-gray-600 text-2xl"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
 
                 {/* Documents */}
@@ -277,13 +317,15 @@ const AdminDocumentVerificationPage: React.FC = () => {
                   <div className="flex space-x-4">
                     <button
                       onClick={() => handleApproveAllDocuments(selectedPartner.id)}
-                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
+                      disabled={selectedPartner.documents?.every(d => d.verified === 'approved')}
+                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       ✓ Approve All Documents ({selectedPartner.documents?.length || 0})
                     </button>
                     <button
                       onClick={() => handleRejectAllDocuments(selectedPartner.id)}
-                      className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-semibold"
+                      disabled={selectedPartner.documents?.every(d => d.verified === 'rejected')}
+                      className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       ✗ Reject All Documents
                     </button>

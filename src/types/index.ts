@@ -21,7 +21,7 @@ export interface PartnerSubscription {
   transactionId?: string;
 }
 
-export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected';
+export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected' | 'In Progress' | 'Completed';
 
 export interface WasteRequest {
   id: string;
@@ -123,7 +123,8 @@ export interface RewardCampaign {
 
 export interface RewardTransaction {
   id: string;
-  partnerId: string;
+  partnerId?: string;
+  userId?: string;
   type: 'earned' | 'redeemed';
   points: number;
   description: string;
@@ -177,23 +178,37 @@ export interface AuditLog {
 export interface Notification {
   id: string;
   partnerId?: string; // undefined for broadcast notifications
+  userId?: string; // for user notifications
   title: string;
   message: string;
-  type: 'verification' | 'pickup' | 'reward' | 'subscription' | 'system' | 'broadcast';
-  status: 'sent' | 'pending' | 'failed';
+  type: 'verification' | 'pickup' | 'reward' | 'subscription' | 'system' | 'broadcast' | 'waste_request' | 'availability_confirmation';
+  status: 'sent' | 'pending' | 'failed' | 'confirmed' | 'declined';
   createdAt: string;
   sentAt?: string;
   readAt?: string;
+  respondedAt?: string;
   priority: 'low' | 'medium' | 'high';
-  category: 'verification_update' | 'pickup_assignment' | 'reward_announcement' | 'subscription_reminder' | 'system_alert' | 'general';
+  category: 'verification_update' | 'pickup_assignment' | 'reward_announcement' | 'subscription_reminder' | 'system_alert' | 'general' | 'availability_check';
   metadata?: {
     wasteRequestId?: string;
     rewardId?: string;
     subscriptionId?: string;
     verificationStatus?: string;
     pickupDate?: string;
+    pickupTime?: string;
+    requiresResponse?: boolean;
     [key: string]: any;
   };
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  rewardPoints: number;
+  createdAt: string;
 }
 
 export interface PickupSchedule {

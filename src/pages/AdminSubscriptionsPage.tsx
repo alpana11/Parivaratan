@@ -194,7 +194,7 @@ const AdminSubscriptionsPage: React.FC = () => {
 
   const handleActivateSubscription = async (partner: Partner, plan: SubscriptionPlan) => {
     // Only allow activation if partner is verified
-    if (partner.status !== 'verified' && partner.status !== 'active') {
+    if (partner.status !== 'verified' && partner.status !== 'active' && partner.verificationStatus !== 'approved') {
       alert('Partner must be verified before subscription activation');
       return;
     }
@@ -471,7 +471,7 @@ const AdminSubscriptionsPage: React.FC = () => {
           {filteredPartners.map((partner) => {
             const subscription = partner.subscription;
             const plan = subscription ? subscriptionPlans.find(p => p.id === subscription.planId) : null;
-            const isVerified = partner.status === 'verified' || partner.status === 'active';
+            const isVerified = partner.status === 'verified' || partner.status === 'active' || partner.verificationStatus === 'approved';
 
             return (
               <div key={partner.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -503,7 +503,7 @@ const AdminSubscriptionsPage: React.FC = () => {
                   </div>
 
                   {subscription && plan ? (
-                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <div className="bg-gray-50 p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium text-gray-900">{plan.name}</span>
                         <span className="text-lg font-bold text-green-600">₹{subscription.amount}</span>
@@ -515,37 +515,10 @@ const AdminSubscriptionsPage: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-gray-50 p-4 rounded-lg mb-4 text-center">
-                      <p className="text-gray-500">No active subscription</p>
+                    <div className="bg-gray-50 p-4 rounded-lg text-center">
+                      <p className="text-gray-500">No subscription purchased</p>
                     </div>
                   )}
-
-                  <div className="flex space-x-2">
-                    {!subscription || subscription.status !== 'active' ? (
-                      <button
-                        onClick={() => {
-                          if (!isVerified) {
-                            alert('Partner must be verified before subscription activation');
-                            return;
-                          }
-                          setSelectedPartner(partner);
-                          setShowSubscriptionModal(true);
-                        }}
-                        className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
-                          isVerified
-                            ? 'bg-green-500 text-white hover:bg-green-600'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                        disabled={!isVerified}
-                      >
-                        {isVerified ? 'Activate Subscription' : 'Verification Required'}
-                      </button>
-                    ) : (
-                      <div className="flex-1 px-3 py-2 text-sm bg-green-50 text-green-700 rounded-lg text-center border border-green-200">
-                        Active until {new Date(subscription.expiryDate).toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             );

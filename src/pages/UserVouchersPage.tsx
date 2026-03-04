@@ -2,30 +2,79 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Voucher } from '../types';
+import { dbService } from '../services/dbService';
 
 const UserVouchersPage: React.FC = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userPoints, setUserPoints] = useState(0);
+  const userId = 'user-123'; // Replace with actual user ID from auth
 
   useEffect(() => {
-    const fetchVouchers = async () => {
-      try {
-        console.log('Fetching vouchers...');
-        const snapshot = await getDocs(collection(db, 'vouchers'));
-        console.log('Snapshot size:', snapshot.size);
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Voucher[];
-        console.log('Vouchers:', data);
-        setVouchers(data);
-      } catch (err: any) {
-        console.error('Error:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchVouchers();
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      console.log('Fetching vouchers...');
+      const snapshot = await getDocs(collection(db, 'vouchers'));
+      console.log('Snapshot size:', snapshot.size);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Voucher[];
+      console.log('Vouchers:', data);
+      setVouchers(data.filter(v => v.status === 'available'));
+      
+      // Fetch user points
+      const user = await dbService.getUser(userId);
+      if (user) {
+        setUserPoints(user.rewardPoints || 0);
+      }
+    } catch (err: any) {
+      console.error('Error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedeem = async (voucher: Voucher) => {
+    if (userPoints < voucher.pointsRequired) {
+      alert('Insufficient points!');
+      return;
+    }
+
+    if (!confirm(`Redeem ${voucher.title} for ${voucher.pointsRequired} points?`)) {
+      return;
+    }
+
+    try {
+      // Deduct points
+      const newPoints = userPoints - voucher.pointsRequired;
+      await dbService.updateUserRewardPoints(userId, newPoints);
+
+      // Create transaction
+      await dbService.addRewardTransaction({
+        userId,
+        type: 'redeemed',
+        points: -voucher.pointsRequired,
+        description: `Redeemed ${voucher.title}`,
+        date: new Date().toISOString(),
+        voucherId: voucher.id
+      });
+
+      // Update voucher
+      await dbService.updateVoucher(voucher.id, {
+        redeemedBy: [...(voucher.redeemedBy || []), userId],
+        currentRedemptions: (voucher.currentRedemptions || 0) + 1
+      });
+
+      alert('Voucher redeemed successfully!');
+      fetchData(); // Refresh data
+    } catch (err: any) {
+      console.error('Redemption error:', err);
+      alert('Failed to redeem voucher');
+    }
+  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-2xl">Loading...</div></div>;
   if (error) return <div className="min-h-screen flex items-center justify-center"><div className="text-2xl text-red-600">Error: {error}</div></div>;
@@ -35,7 +84,11 @@ const UserVouchersPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">🎁 Available Vouchers</h1>
-          <p className="text-lg text-gray-600">Redeem your reward points for exciting offers</p>
+          <p className="text-lg text-gray-600 mb-4">Redeem your reward points for exciting offers</p>
+          <div className="inline-block bg-gradient-to-r from-emerald-600 to-green-600 text-white px-8 py-4 rounded-2xl shadow-lg">
+            <div className="text-3xl font-bold">{userPoints}</div>
+            <div className="text-sm">Your Points</div>
+          </div>
         </div>
 
         {vouchers.length === 0 ? (
@@ -70,10 +123,15 @@ const UserVouchersPage: React.FC = () => {
                       <div className="text-xs text-gray-500">Points Required</div>
                     </div>
                     <button
-                      disabled
-                      className="px-6 py-2 bg-gray-300 text-gray-600 rounded-lg font-medium cursor-not-allowed"
+                      onClick={() => handleRedeem(voucher)}
+                      disabled={userPoints < voucher.pointsRequired}
+                      className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                        userPoints >= voucher.pointsRequired
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                      }`}
                     >
-                      View Only
+                      {userPoints >= voucher.pointsRequired ? 'Redeem' : 'Insufficient Points'}
                     </button>
                   </div>
                 </div>

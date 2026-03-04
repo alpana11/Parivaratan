@@ -8,6 +8,7 @@ const PickupHistoryPage: React.FC = () => {
   const { metrics } = useImpactMetrics();
   const { user } = useAuth();
   const [scheduledFromDB, setScheduledFromDB] = useState<any[]>([]);
+  const [filter, setFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
 
   useEffect(() => {
     if (!user) return;
@@ -17,19 +18,25 @@ const PickupHistoryPage: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
-  const completedPickups = requests.filter(req => req.status === 'Completed');
+  const completedPickups = requests
+    .filter(req => req.status === 'Completed')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   // Combine scheduled pickups from both sources and deduplicate
   const scheduledFromRequests = requests.filter(req => req.scheduledDate && req.scheduledTime && req.status !== 'Completed');
   const allScheduled = [...scheduledFromRequests, ...scheduledFromDB];
   
-  // Deduplicate by requestId or id
+  // Deduplicate by requestId or id and sort by date
   const scheduledPickups = Array.from(
     new Map(allScheduled.map(item => [
       item.requestId || item.id,
       item
     ])).values()
-  );
+  ).sort((a, b) => {
+    const dateA = new Date(a.scheduledDate || a.date).getTime();
+    const dateB = new Date(b.scheduledDate || b.date).getTime();
+    return dateB - dateA;
+  });
 
   console.log('📦 Pickup History Debug:', {
     totalRequests: requests.length,
@@ -43,7 +50,7 @@ const PickupHistoryPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Pickup History & Contribution</h1>
             <p className="text-gray-600">Track your completed pickups and environmental impact</p>
@@ -54,6 +61,32 @@ const PickupHistoryPage: React.FC = () => {
               <span className="text-xs text-green-700 font-medium">Pathway Live • {updateCount}</span>
             </div>
           )}
+        </div>
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+              filter === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All ({scheduledPickups.length + completedPickups.length})
+          </button>
+          <button
+            onClick={() => setFilter('scheduled')}
+            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+              filter === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Scheduled Pickups ({scheduledPickups.length})
+          </button>
+          <button
+            onClick={() => setFilter('completed')}
+            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+              filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Completed Pickups ({completedPickups.length})
+          </button>
         </div>
       </div>
 
@@ -91,6 +124,7 @@ const PickupHistoryPage: React.FC = () => {
       {/* Scheduled Pickups and Completed Pickups - Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Scheduled Pickups - Left */}
+        {(filter === 'all' || filter === 'scheduled') && (
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Scheduled Pickups</h2>
@@ -162,8 +196,10 @@ const PickupHistoryPage: React.FC = () => {
             )}
           </div>
         </div>
+        )}
 
         {/* Completed Pickups - Right */}
+        {(filter === 'all' || filter === 'completed') && (
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Completed Pickups</h2>
@@ -228,6 +264,7 @@ const PickupHistoryPage: React.FC = () => {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Environmental Impact */}

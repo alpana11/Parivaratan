@@ -57,16 +57,11 @@ const UserDashboard: React.FC = () => {
 
     try {
       // Deduct points
-      const userRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userRef);
-      const currentPoints = userDoc.data()?.rewardPoints || 0;
-      
-      await dbService.updateUser(userId, {
-        rewardPoints: currentPoints - voucher.pointsRequired
-      });
+      const newPoints = userPoints - voucher.pointsRequired;
+      await dbService.updateUserRewardPoints(userId, newPoints);
 
       // Create transaction
-      await dbService.createRewardTransaction({
+      await dbService.addRewardTransaction({
         userId,
         type: 'redeemed',
         points: -voucher.pointsRequired,

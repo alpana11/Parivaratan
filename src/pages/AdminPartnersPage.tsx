@@ -209,7 +209,7 @@ const AdminPartnersPage: React.FC = () => {
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-sm text-green-700 font-medium">Real-time Updates</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2">
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-2 text-sm rounded-lg transition-colors ${
@@ -346,22 +346,7 @@ const AdminPartnersPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Update Status:
-                    {updatedPartners.has(partner.id) && (
-                      <span className="ml-2 text-xs text-orange-600 font-normal">(Status locked after update)</span>
-                    )}
-                  </label>
-                  <select
-                    value={partner.verificationStatus}
-                    onChange={(e) => handleStatusUpdateRequest(partner.id, e.target.value)}
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="approved">Verified</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
+
               </div>
             </div>
           ))}

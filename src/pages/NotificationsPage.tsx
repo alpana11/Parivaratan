@@ -44,6 +44,28 @@ const NotificationsPage: React.FC = () => {
     }
   };
 
+  const handleAvailabilityResponse = async (notificationId: string, response: 'confirmed' | 'declined') => {
+    try {
+      await dbService.respondToAvailabilityConfirmation(notificationId, response);
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === notificationId 
+            ? { ...notif, status: response, respondedAt: new Date().toISOString() } 
+            : notif
+        )
+      );
+      
+      const responseText = response === 'confirmed' 
+        ? 'confirmed your availability! The partner will proceed with the pickup.' 
+        : 'declined. The partner will contact you to reschedule.';
+      
+      alert(`✅ You have ${responseText}`);
+    } catch (error) {
+      console.error('Error responding to availability confirmation:', error);
+      alert('Failed to send response');
+    }
+  };
+
   const markAllAsRead = async () => {
     try {
       const unreadIds = notifications.filter(n => !n.readAt).map(n => n.id);
@@ -144,25 +166,72 @@ const NotificationsPage: React.FC = () => {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`border rounded-lg p-4 ${!notification.readAt ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}
+                  className={`border rounded-lg p-4 ${
+                    !notification.readAt ? 'bg-blue-50 border-blue-200' : 'bg-white'
+                  } ${
+                    notification.type === 'availability_confirmation' && !notification.respondedAt
+                      ? 'border-l-4 border-l-purple-500'
+                      : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className={`text-sm ${!notification.readAt ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                      {notification.type === 'availability_confirmation' && (
+                        <div className="flex items-center mb-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            </svg>
+                            Partner is asking you
+                          </span>
+                        </div>
+                      )}
+                      <p className={`text-sm ${
+                        !notification.readAt ? 'font-medium text-gray-900' : 'text-gray-700'
+                      }`}>
                         {notification.message}
                       </p>
+                      {notification.metadata?.pickupDate && notification.metadata?.pickupTime && (
+                        <div className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                          <span className="font-semibold">Pickup Details:</span> {new Date(notification.metadata.pickupDate).toLocaleDateString()} at {notification.metadata.pickupTime}
+                        </div>
+                      )}
                       <p className="text-xs text-gray-500 mt-1">
                         {new Date(notification.createdAt).toLocaleDateString()} at {new Date(notification.createdAt).toLocaleTimeString()}
                       </p>
+                      {notification.respondedAt && (
+                        <p className="text-xs text-green-600 mt-1 font-medium">
+                          ✓ Responded: {notification.status === 'confirmed' ? 'Confirmed' : 'Declined'} on {new Date(notification.respondedAt).toLocaleDateString()}
+                        </p>
+                      )}
                     </div>
-                    {!notification.readAt && (
-                      <button
-                        onClick={() => markAsRead(notification.id)}
-                        className="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        Mark as read
-                      </button>
-                    )}
+                    <div className="ml-4 flex flex-col space-y-2">
+                      {notification.type === 'availability_confirmation' && !notification.respondedAt ? (
+                        <>
+                          <button
+                            onClick={() => handleAvailabilityResponse(notification.id, 'confirmed')}
+                            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            ✓ Yes, I'm Available
+                          </button>
+                          <button
+                            onClick={() => handleAvailabilityResponse(notification.id, 'declined')}
+                            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            ✗ No, Not Available
+                          </button>
+                        </>
+                      ) : (
+                        !notification.readAt && (
+                          <button
+                            onClick={() => markAsRead(notification.id)}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                          >
+                            Mark as read
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -11,6 +11,10 @@ A modern web application for waste management partners to manage waste collectio
 - **Impact Analytics**: Visualize environmental impact and performance metrics
 - **Rewards System**: Earn points for completed pickups and redeem vouchers
 - **Profile Management**: Manage partner information and preferences
+- **Availability Confirmation**: Send confirmation requests to users 12 hours before pickup
+  - Partners can ask users: "Will you be available?"
+  - Users respond with "Yes" or "No"
+  - Reduces no-shows and improves communication
 
 ## Tech Stack
 
