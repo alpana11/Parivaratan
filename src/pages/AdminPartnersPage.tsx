@@ -308,14 +308,11 @@ const AdminPartnersPage: React.FC = () => {
                   <div className="text-sm text-gray-600">
                     <span className="font-medium">Waste Types:</span>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {partner.supportedWasteTypes?.slice(0, 3).map((type, index) => (
+                      {partner.supportedWasteTypes?.map((type, index) => (
                         <span key={index} className="inline-flex px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
                           {type}
                         </span>
                       )) || <span className="text-gray-400">Not specified</span>}
-                      {partner.supportedWasteTypes && partner.supportedWasteTypes.length > 3 && (
-                        <span className="text-xs text-gray-500">+{partner.supportedWasteTypes.length - 3} more</span>
-                      )}
                     </div>
                   </div>
                 </div>
