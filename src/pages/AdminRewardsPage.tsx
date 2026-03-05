@@ -192,9 +192,9 @@ const AdminRewardsPage: React.FC = () => {
                   <div key={rule.id} className="border border-gray-200 rounded-lg p-4">
                     <h4 className="font-medium text-gray-900 mb-2">{rule.wasteType}</h4>
                     <div className="text-sm text-gray-600 space-y-1">
-                      <div>Base: {rule.pointsPerKg} points/kg</div>
-                      <div>5kg sample: {simulateRewardIssuance(rule.wasteType, 5)} points</div>
-                      <div>10kg sample: {simulateRewardIssuance(rule.wasteType, 10)} points</div>
+                      <div>Base: {rule.pointsPerKg} points/unit</div>
+                      <div>5 units: {simulateRewardIssuance(rule.wasteType, 5)} points</div>
+                      <div>10 units: {simulateRewardIssuance(rule.wasteType, 10)} points</div>
                     </div>
                   </div>
                 ))}
@@ -279,7 +279,7 @@ const AdminRewardsPage: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Points per kg</label>
+                        <label className="block text-xs text-gray-600 mb-1">Points per unit</label>
                         <input
                           type="number"
                           value={rule.pointsPerKg}
@@ -288,7 +288,7 @@ const AdminRewardsPage: React.FC = () => {
                         />
                       </div>
                       <div className="text-xs text-gray-500">
-                        Sample: 5kg = {simulateRewardIssuance(rule.wasteType, 5)} points
+                        Sample: 5 units = {simulateRewardIssuance(rule.wasteType, 5)} points
                       </div>
                     </div>
                   </div>
@@ -388,7 +388,7 @@ const AdminRewardsPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Points per kg</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Points per unit</label>
                     <input
                       type="number"
                       value={newRule.pointsPerKg}

@@ -50,6 +50,9 @@ const AdminVouchersPage: React.FC = () => {
       return;
     }
 
+    const expiryDate = new Date();
+    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
     const voucherData: any = {
       title: newVoucher.title,
       description: newVoucher.description,
@@ -57,6 +60,7 @@ const AdminVouchersPage: React.FC = () => {
       image: '/voucher-placeholder.png',
       category: newVoucher.category,
       status: 'available',
+      expiryDate: expiryDate.toISOString(),
       createdAt: new Date().toISOString(),
       currentRedemptions: 0
     };

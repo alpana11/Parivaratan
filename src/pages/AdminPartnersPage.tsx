@@ -341,7 +341,7 @@ const AdminPartnersPage: React.FC = () => {
                       }}
                       className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
                     >
-                      💰 Rewards
+                      💰 Subscription
                     </button>
                   </div>
                 </div>
@@ -430,7 +430,7 @@ const AdminPartnersPage: React.FC = () => {
             <div className="bg-white rounded-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-gray-900">💰 Subscription & Rewards</h3>
+                  <h3 className="text-xl font-bold text-gray-900">💰 Subscription Details</h3>
                   <button
                     onClick={() => setShowSubscriptionModal(false)}
                     className="text-gray-400 hover:text-gray-600"
@@ -465,16 +465,6 @@ const AdminPartnersPage: React.FC = () => {
                           </div>
                           <div className="text-sm text-blue-600">
                             Expires: {sub.expiry}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-green-50 p-4 rounded-lg text-center">
-                            <div className="text-2xl font-bold text-green-600">{sub.totalEarned}</div>
-                            <div className="text-sm text-green-700">Reward Points</div>
-                          </div>
-                          <div className="bg-purple-50 p-4 rounded-lg text-center">
-                            <div className="text-2xl font-bold text-purple-600">{sub.redeemedVouchers}</div>
-                            <div className="text-sm text-purple-700">Vouchers Redeemed</div>
                           </div>
                         </div>
 
