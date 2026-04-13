@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import FloatingActionButton from '../components/FloatingActionButton';
 
 const AdminDashboard: React.FC = () => {
   const { admin, signOut } = useAuth();
@@ -259,6 +260,12 @@ const AdminDashboard: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <FloatingActionButton actions={[
+        { icon: '🧑🤝🧑', label: 'Partners', onClick: () => navigate('/admin/partners'), color: 'bg-blue-500' },
+        { icon: '♻️', label: 'Waste Requests', onClick: () => navigate('/admin/waste-requests'), color: 'bg-green-500' },
+        { icon: '🎫', label: 'Vouchers', onClick: () => navigate('/admin/vouchers'), color: 'bg-purple-500' },
+        { icon: '🔔', label: 'Notifications', onClick: () => navigate('/admin/notifications'), color: 'bg-orange-500' },
+      ]} />
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Partner } from '../types';
 
 const UserWasteRequestPage: React.FC = () => {
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [filteredPartners, setFilteredPartners] = useState<Partner[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [formData, setFormData] = useState({
     image: '',
@@ -18,6 +19,28 @@ const UserWasteRequestPage: React.FC = () => {
   useEffect(() => {
     loadPartners();
   }, []);
+
+  useEffect(() => {
+    if (formData.type) {
+      console.log('Selected waste type:', formData.type);
+      console.log('All partners:', partners.map(p => ({ name: p.name, types: p.supportedWasteTypes })));
+      
+      const matching = partners.filter(p => {
+        const hasMatch = p.supportedWasteTypes?.some(type => {
+          const typeMatch = type.toLowerCase() === formData.type.toLowerCase() ||
+                           type.toLowerCase().includes(formData.type.toLowerCase()) ||
+                           formData.type.toLowerCase().includes(type.toLowerCase());
+          return typeMatch;
+        });
+        return hasMatch;
+      });
+      
+      console.log('Matching partners:', matching.map(p => p.name));
+      setFilteredPartners(matching);
+    } else {
+      setFilteredPartners(partners);
+    }
+  }, [formData.type, partners]);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -141,7 +164,7 @@ const UserWasteRequestPage: React.FC = () => {
                   required
                 >
                   <option value="">Choose a partner</option>
-                  {partners.map(partner => (
+                  {filteredPartners.map(partner => (
                     <option key={partner.id} value={partner.id}>
                       {partner.name} - {partner.organization} ({partner.partnerType})
                     </option>

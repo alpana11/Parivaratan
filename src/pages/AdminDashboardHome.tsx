@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { dbService } from '../services/dbService';
+import AOS from 'aos';
+import 'aos/dist/aos.css';
 
 const AdminDashboardHome: React.FC = () => {
   const [stats, setStats] = useState({
@@ -221,6 +223,8 @@ const AdminDashboardHome: React.FC = () => {
     setRecentActivity(recentActivities);
   };
 
+  useEffect(() => { AOS.init({ duration: 600, once: true }); }, []);
+
   const loadDashboardData = async () => {
     setIsLoading(true);
   };
@@ -240,7 +244,7 @@ const AdminDashboardHome: React.FC = () => {
       {/* Enhanced Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         {/* Active Users Card */}
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+        <div data-aos="fade-up" data-aos-delay="0" className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Active Users</h3>
             <div className="text-2xl">👥</div>
@@ -262,7 +266,7 @@ const AdminDashboardHome: React.FC = () => {
         </div>
 
         {/* Waste Requests Section */}
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+        <div data-aos="fade-up" data-aos-delay="100" className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Waste Requests</h3>
             <div className="text-2xl">♻️</div>
@@ -300,7 +304,7 @@ const AdminDashboardHome: React.FC = () => {
         </div>
 
         {/* Partners Section */}
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+        <div data-aos="fade-up" data-aos-delay="200" className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Partners</h3>
             <div className="text-2xl">🧑‍🤝‍🧑</div>
@@ -338,7 +342,7 @@ const AdminDashboardHome: React.FC = () => {
         </div>
 
         {/* Rewards Section */}
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+        <div data-aos="fade-up" data-aos-delay="300" className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Rewards</h3>
             <div className="text-2xl">🎁</div>
@@ -369,7 +373,7 @@ const AdminDashboardHome: React.FC = () => {
         </div>
 
         {/* Environmental Impact Section */}
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+        <div data-aos="fade-up" data-aos-delay="400" className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Environmental Impact</h3>
             <div className="text-2xl flex items-center justify-center">🌱</div>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
+import FloatingActionButton from '../components/FloatingActionButton';
 
 const PartnerDashboard: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, partner, loading } = useAuth();
   const [loadTimeout, setLoadTimeout] = React.useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -174,6 +176,12 @@ const PartnerDashboard: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <FloatingActionButton actions={[
+        { icon: '📦', label: 'Waste Requests', onClick: () => navigate('/dashboard/requests'), color: 'bg-green-500' },
+        { icon: '📍', label: 'Location & Routes', onClick: () => navigate('/dashboard/location-routes'), color: 'bg-blue-500' },
+        { icon: '📊', label: 'Analytics', onClick: () => navigate('/dashboard/analytics'), color: 'bg-purple-500' },
+        { icon: '🔔', label: 'Notifications', onClick: () => navigate('/dashboard/notifications'), color: 'bg-orange-500' },
+      ]} />
     </div>
   );
 };

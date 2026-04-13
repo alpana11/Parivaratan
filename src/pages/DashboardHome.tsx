@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
+import AOS from 'aos';
+import 'aos/dist/aos.css';
 
 const DashboardHome: React.FC = () => {
   const { partner, user } = useAuth();
+  useEffect(() => { AOS.init({ duration: 600, once: true }); }, []);
   const { requests, streamActive: pathwayStreamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const { metrics } = useImpactMetrics();
 
@@ -57,7 +60,7 @@ const DashboardHome: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
+        <div data-aos="fade-up" data-aos-delay="0" className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
           <div className="flex items-center">
             <div className="p-3 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,7 +74,7 @@ const DashboardHome: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
+        <div data-aos="fade-up" data-aos-delay="100" className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
           <div className="flex items-center">
             <div className="p-3 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-xl">
               <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,7 +88,7 @@ const DashboardHome: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
+        <div data-aos="fade-up" data-aos-delay="200" className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 border border-gray-100">
           <div className="flex items-center">
             <div className="p-3 bg-gradient-to-br from-yellow-100 to-orange-200 rounded-xl">
               <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

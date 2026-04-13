@@ -369,8 +369,8 @@ const PartnerSignUpPage: React.FC = () => {
                         <label key={wasteType} className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer transition-all duration-200">
                           <input
                             type="checkbox"
-                            checked={formData.supportedWasteTypes.includes(wasteType.toLowerCase())}
-                            onChange={(e) => handleWasteTypeChange(wasteType.toLowerCase(), e.target.checked)}
+                            checked={formData.supportedWasteTypes.includes(wasteType)}
+                            onChange={(e) => handleWasteTypeChange(wasteType, e.target.checked)}
                             className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
                           />
                           <span className="ml-3 text-sm font-medium text-gray-700">{wasteType}</span>
