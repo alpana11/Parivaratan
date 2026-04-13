@@ -29,6 +29,7 @@ import AdminRewardsPage from './pages/AdminRewardsPage';
 import AdminVouchersPage from './pages/AdminVouchersPage';
 import AdminSchedulingPage from './pages/AdminSchedulingPage';
 import AdminNotificationsPage from './pages/AdminNotificationsPage';
+import AdminCommunityPage from './pages/AdminCommunityPage';
 import AdminSetupPage from './pages/AdminSetupPage';
 import UserVouchersPage from './pages/UserVouchersPage';
 import UserDashboard from './pages/UserDashboard';
@@ -74,6 +75,7 @@ function App() {
             <Route path="scheduling" element={<AdminSchedulingPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
             <Route path="notifications" element={<AdminNotificationsPage />} />
+            <Route path="community" element={<AdminCommunityPage />} />
           </Route>
           <Route path="/dashboard" element={<ProtectedRoute requirePartner><PartnerDashboard /></ProtectedRoute>}>
             <Route index element={<DashboardHome />} />

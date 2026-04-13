@@ -250,6 +250,22 @@ const AdminDashboard: React.FC = () => {
                   )}
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/admin/community"
+                  className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                    isActiveRoute('/admin/community')
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
+                      : 'text-gray-700 hover:bg-gray-100 hover:shadow-md'
+                  }`}
+                >
+                  <span className="text-lg mr-3">🌱</span>
+                  <span>Community</span>
+                  {isActiveRoute('/admin/community') && (
+                    <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
+                  )}
+                </Link>
+              </li>
 
             </ul>
           </div>
