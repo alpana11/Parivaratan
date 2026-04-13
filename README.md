@@ -1,190 +1,255 @@
-# Parivartan - Waste Management Partner Platform
+# 🌱 Parivartan – Smart Waste Management Platform
 
-A modern web application for waste management partners to manage waste collection requests, track impact, and redeem rewards.
+A modern, scalable platform empowering waste management partners and communities to collaborate for a cleaner and greener environment.
 
-## Features
+Parivartan combines **waste collection operations**, **community engagement**, and **admin intelligence** into one unified ecosystem.
 
-- **Partner Authentication**: Secure signup and login for waste management partners
-- **Waste Request Management**: View, accept, and update waste collection requests
-- **Real-time Dashboard**: Track active requests, completed pickups, and impact metrics
-- **Location & Routes**: Optimized routing for waste collection
-- **Impact Analytics**: Visualize environmental impact and performance metrics
-- **Rewards System**: Earn points for completed pickups and redeem vouchers
-- **Profile Management**: Manage partner information and preferences
-- **Availability Confirmation**: Send confirmation requests to users 12 hours before pickup
-  - Partners can ask users: "Will you be available?"
-  - Users respond with "Yes" or "No"
-  - Reduces no-shows and improves communication
+---
 
-## Tech Stack
+## 🚀 Key Highlights
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Vite
-- **Backend**: Firebase (Authentication, Firestore)
-- **File Storage**: Cloudinary (Free CDN alternative to Firebase Storage)
-- **Charts**: Recharts
-- **Routing**: React Router
+* ♻️ Smart Waste Collection System
+* 🤝 Community Engagement (Social Feature)
+* 📊 Real-time Analytics Dashboard
+* 🛡️ Admin Moderation & Monitoring
+* 🎁 Reward-Based Incentive System
+* 📍 Location & Route Optimization
 
+---
 
-## Firebase Setup
+## 📱 Platform Modules
 
-1. Create a Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/)
+### 1️⃣ Partner Platform (Web App)
 
-2. Enable Authentication:
-   - Go to Authentication > Sign-in method
-   - Enable Email/Password provider
+Designed for waste collection partners to efficiently manage operations.
 
-3. Enable Firestore Database:
-   - Go to Firestore Database
-   - Create database in production mode
+**Features:**
 
-4. Get your Firebase config:
-   - Go to Project settings > General
-   - Scroll to "Your apps" section
-   - Click "Add app" > Web app
-   - Copy the config object
+* 🔐 Secure Authentication (Login/Signup)
+* 📦 Waste Request Management
+* 📊 Real-time Dashboard (Active, Completed, Impact)
+* 🗺️ Route Optimization
+* 🌍 Environmental Impact Tracking
+* 🎁 Rewards & Voucher Redemption
+* 👤 Profile Management
+* ⏰ Availability Confirmation System
 
-5. Update `.env` file with Firebase credentials
+---
 
-## Cloudinary Setup (File Storage)
+### 2️⃣ Community Feature (Mobile App)
 
-**Note**: Firebase Storage requires Blaze (paid) plan. We use Cloudinary's free tier instead.
+A social platform where users contribute to sustainability.
 
-1. Create account at [https://cloudinary.com/users/register/free](https://cloudinary.com/users/register/free)
-2. Get Cloud Name from dashboard
-3. Create unsigned upload preset in Settings > Upload
-4. Update `.env` with Cloudinary credentials
+**Features:**
 
-**See `CLOUDINARY_SETUP.md` for detailed instructions.**
+* 📝 Create posts (recycling activities, awareness)
+* ❤️ Like, 💬 Comment, 🔄 Share
+* 🌱 Promote eco-friendly habits
+* 👥 Build a sustainability-driven community
 
-## Firestore Data Structure
+---
 
-### Partners Collection
+### 3️⃣ Admin Dashboard (Web Panel)
+
+Advanced monitoring and control system for platform management.
+
+**Community Moderation Features:**
+
+* 👁️ View all community posts
+* 🚩 Flag inappropriate content
+* ❌ Delete posts/comments
+* 📊 Monitor engagement (likes, comments)
+* ⚡ Real-time updates using Firestore
+* 🛡️ Content control system (basic moderation)
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+* React 18
+* TypeScript
+* Tailwind CSS
+* Vite
+
+### Backend & Services
+
+* Firebase Authentication
+* Firestore Database
+* Cloudinary (File Storage)
+
+### Additional Tools
+
+* Recharts (Analytics)
+* React Router (Navigation)
+
+---
+
+## 🔥 Firebase Setup
+
+1. Go to Firebase Console
+2. Create a new project
+
+### Enable Authentication
+
+* Go to Authentication → Sign-in method
+* Enable Email/Password
+
+### Enable Firestore
+
+* Create database in production mode
+
+### Get Config
+
+* Project Settings → Web App → Copy config
+
+---
+
+## ☁️ Cloudinary Setup
+
+Used as a free alternative to Firebase Storage.
+
+1. Create account on Cloudinary
+2. Get Cloud Name
+3. Create Upload Preset
+4. Add credentials to `.env`
+
+---
+
+## 🗄️ Firestore Database Structure
+
+### 📌 communityPosts (NEW 🔥)
+
 ```json
 {
-  "id": "user-uid",
-  "name": "Partner Name",
-  "email": "partner@example.com",
-  "phone": "+91-XXXXXXXXXX",
-  "organization": "Company Name",
-  "partnerType": "Individual/Organization",
-  "address": "Full Address",
-  "status": "pending|approved",
-  "documents": ["doc1.pdf", "doc2.pdf"],
-  "rewardPoints": 1250,
-  "createdAt": "2025-12-26T10:00:00Z"
+  "caption": "string",
+  "comments": 0,
+  "createdAt": "timestamp",
+  "imageUrl": "string",
+  "likedBy": ["userId"],
+  "likes": 2,
+  "userId": "string",
+  "userName": "string"
 }
 ```
 
-### Waste Requests Collection
+---
+
+### 📌 partners
+
 ```json
 {
-  "id": "request-id",
-  "partnerId": "partner-uid",
-  "image": "https://example.com/image.jpg",
-  "type": "Plastic Bottles",
-  "confidence": 95,
-  "quantity": "10 kg",
-  "location": "Downtown Area",
-  "status": "Assigned|Accepted|In Progress|Completed",
-  "date": "2025-12-26T10:00:00Z",
-  "createdAt": "2025-12-26T09:00:00Z"
+  "name": "string",
+  "email": "string",
+  "phone": "string",
+  "organization": "string",
+  "status": "pending | approved",
+  "rewardPoints": 1000
 }
 ```
 
-### Impact Metrics Collection (per partner)
+---
+
+### 📌 wasteRequests
+
 ```json
 {
-  "wasteProcessed": 1250,
-  "co2Reduction": 375,
-  "updatedAt": "2025-12-26T10:00:00Z"
+  "type": "Plastic",
+  "quantity": "10kg",
+  "status": "Assigned | Completed",
+  "location": "string"
 }
 ```
 
-### Vouchers Collection
+---
+
+### 📌 vouchers
+
 ```json
 {
-  "id": "voucher-id",
-  "title": "₹500 Amazon Gift Card",
-  "description": "Redeem for ₹500 Amazon gift card",
+  "title": "Gift Card",
   "pointsRequired": 1000,
-  "image": "https://example.com/voucher.jpg",
-  "category": "Gift Cards",
-  "status": "available|redeemed",
-  "redeemedDate": "2025-12-26T10:00:00Z",
-  "redeemedBy": "partner-uid"
+  "status": "available"
 }
 ```
 
-### Reward Transactions Collection
-```json
-{
-  "id": "transaction-id",
-  "partnerId": "partner-uid",
-  "type": "earned|redeemed",
-  "points": 50,
-  "description": "Completed plastic waste pickup",
-  "date": "2025-12-26T10:00:00Z",
-  "voucherId": "voucher-id"
-}
+---
+
+## ⚙️ Installation & Setup
+
+```bash
+git clone <repo-url>
+cd parivartan
+npm install
+npm run dev
 ```
 
-## Installation & Setup
+---
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd parivartan
-   ```
+## 🔑 Environment Variables
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Set up Firebase (see Firebase Setup section above)
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-5. Build for production:
-   ```bash
-   npm run build
-   ```
-
-## Environment Variables
-
-Create a `.env` file in the root directory:
+Create `.env` file:
 
 ```env
-# Firebase Configuration
-VITE_FIREBASE_API_KEY=your-api-key
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-VITE_FIREBASE_APP_ID=your-app-id
+# Firebase
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
 
-# Gemini AI (for AI insights)
-VITE_GEMINI_API_KEY=your-gemini-api-key
+# Gemini AI
+VITE_GEMINI_API_KEY=
 
-# Cloudinary (for file uploads)
-VITE_CLOUDINARY_CLOUD_NAME=your-cloud-name
-VITE_CLOUDINARY_UPLOAD_PRESET=your-upload-preset
+# Cloudinary
+VITE_CLOUDINARY_CLOUD_NAME=
+VITE_CLOUDINARY_UPLOAD_PRESET=
 ```
 
+---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 src/
-├── components/          # Reusable UI components
-├── config/             # Firebase configuration
-├── hooks/              # Custom React hooks
-├── pages/              # Page components
-├── services/           # Firebase service functions
-├── types/              # TypeScript type definitions
-├── App.tsx             # Main app component
-├── main.tsx            # App entry point
-└── index.css           # Global styles
+├── components/
+├── config/
+├── hooks/
+├── pages/
+├── services/
+├── types/
+├── App.tsx
+├── main.tsx
+```
+
+---
+
+## 🌟 Unique Features
+
+* 🔄 Community-driven waste awareness
+* 📊 Real-time admin monitoring
+* 🤖 AI-ready architecture (future scope)
+* 🎯 Incentive-based recycling model
+
+---
+
+## 🚀 Future Enhancements
+
+* AI-based content moderation
+* Smart waste classification
+* Gamification system
+* Advanced analytics dashboard
+
+---
+
+## 📌 Vision
+
+> "Empowering communities to take small steps toward a sustainable future through technology."
+
+---
+
+## 👩‍💻 Developed By
+
+Team Aarambha 💚
