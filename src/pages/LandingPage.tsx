@@ -438,124 +438,195 @@ const LandingPage: React.FC = () => {
 
       {/* Learn More Modal */}
       {showLearnMore && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-3xl font-bold text-gray-900">About Parivartan</h3>
-                <button
-                  onClick={() => setShowLearnMore(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
-                >
-                  ×
-                </button>
+              {/* Header */}
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-3xl font-bold text-gray-900">🌍 Our Mission</h3>
+                  <p className="text-emerald-600 font-medium mt-1">Our Journey Towards a Cleaner India 🌱</p>
+                  <p className="text-gray-500 text-sm italic mt-1">Turning waste into impact, one step at a time.</p>
+                </div>
+                <button onClick={() => setShowLearnMore(false)} className="text-gray-400 hover:text-gray-600 text-3xl font-light">×</button>
               </div>
 
               <div className="space-y-8">
-                {/* Mission */}
-                <div>
-                  <h4 className="text-2xl font-semibold text-gray-900 mb-4">Our Mission</h4>
+
+                {/* Our Story */}
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-6 border-l-4 border-emerald-500">
+                  <h4 className="text-xl font-bold text-gray-900 mb-3">📖 Our Story</h4>
+                  <h5 className="text-lg font-semibold text-emerald-700 mb-3">Why We Built Parivartan</h5>
+                  <p className="text-gray-600 leading-relaxed mb-3">
+                    We observed a major waste management problem in our city, where large amounts of waste are generated daily but not properly recycled or segregated.
+                  </p>
+                  <p className="text-gray-600 leading-relaxed mb-3">
+                    Through further research across cities like Jaipur and others, we discovered that this is not just a local issue but a nationwide concern.
+                  </p>
                   <p className="text-gray-600 leading-relaxed">
-                    Parivartan is revolutionizing waste management by leveraging artificial intelligence to create
-                    a sustainable, efficient, and rewarding ecosystem for waste collection and processing.
-                    We believe that technology can transform how communities handle waste, making it easier,
-                    more transparent, and beneficial for everyone involved.
+                    In India, more than <span className="font-bold text-emerald-700">60 million tons of waste</span> is generated every year, and nearly <span className="font-bold text-emerald-700">60% of it can be recycled</span>. However, due to lack of awareness, accessibility, and proper systems, much of this recyclable waste goes unused. This inspired us to build Parivartan.
                   </p>
                 </div>
 
-                {/* Technology */}
+                {/* Goals */}
                 <div>
-                  <h4 className="text-2xl font-semibold text-gray-900 mb-4">AI-Powered Technology</h4>
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <h5 className="text-lg font-medium text-gray-900 mb-2">Smart Classification</h5>
-                      <p className="text-gray-600">
-                        Our advanced machine learning models can identify over 50 different waste categories
-                        with 95% accuracy, automatically determining the best processing method for each item.
-                      </p>
-                    </div>
-                    <div>
-                      <h5 className="text-lg font-medium text-gray-900 mb-2">Real-time Processing</h5>
-                      <p className="text-gray-600">
-                        Instant analysis and partner matching ensures waste is collected and processed
-                        within hours, not days, reducing environmental impact and health risks.
-                      </p>
-                    </div>
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">🎯 Our Goals</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[
+                      { icon: '♻️', text: 'Make recycling easy and accessible' },
+                      { icon: '🌿', text: 'Encourage responsible waste habits' },
+                      { icon: '🇮🇳', text: 'Build a cleaner and greener India' },
+                    ].map((goal, i) => (
+                      <div key={i} className="flex items-center space-x-3 bg-white border border-emerald-100 rounded-xl p-4 shadow-sm">
+                        <span className="text-2xl">{goal.icon}</span>
+                        <p className="text-gray-700 font-medium text-sm">{goal.text}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* Benefits */}
+                {/* How It Works */}
                 <div>
-                  <h4 className="text-2xl font-semibold text-gray-900 mb-4">Benefits for Partners</h4>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div className="bg-emerald-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-emerald-800 mb-2">Financial Rewards</h5>
-                      <p className="text-sm text-emerald-700">
-                        Earn competitive compensation for each successful waste collection and processing job.
-                      </p>
-                    </div>
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-blue-800 mb-2">Flexible Schedule</h5>
-                      <p className="text-sm text-blue-700">
-                        Work on your own terms with our intelligent routing system that optimizes your time.
-                      </p>
-                    </div>
-                    <div className="bg-indigo-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-indigo-800 mb-2">Environmental Impact</h5>
-                      <p className="text-sm text-indigo-700">
-                        Track your contribution to a cleaner planet with detailed analytics and recognition.
-                      </p>
-                    </div>
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">⚙️ How It Works</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { icon: '🔍', step: '1', title: 'Identify Waste', desc: 'Use AI to scan and identify your waste type instantly' },
+                      { icon: '📅', step: '2', title: 'Schedule Pickup', desc: 'Choose a convenient time for recycler to collect' },
+                      { icon: '🚛', step: '3', title: 'Recycler Collects', desc: 'Verified recycler arrives and picks up your waste' },
+                      { icon: '🌟', step: '4', title: 'Earn EcoPoints', desc: 'Get rewarded for every pickup' },
+                    ].map((item, i) => (
+                      <div key={i} className="text-center bg-gradient-to-b from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100">
+                        <div className="text-3xl mb-2">{item.icon}</div>
+                        <div className="w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center mx-auto mb-2">{item.step}</div>
+                        <h5 className="font-bold text-gray-900 text-sm mb-1">{item.title}</h5>
+                        <p className="text-gray-500 text-xs leading-relaxed">{item.desc}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* Environmental Impact */}
+                {/* Why Parivartan */}
                 <div>
-                  <h4 className="text-2xl font-semibold text-gray-900 mb-4">Environmental Impact</h4>
-                  <p className="text-gray-600 leading-relaxed mb-4">
-                    Every ton of waste properly managed through Parivartan prevents pollution, reduces
-                    greenhouse gas emissions, and conserves valuable resources. Our platform helps:
-                  </p>
-                  <ul className="list-disc list-inside text-gray-600 space-y-2">
-                    <li>Reduce landfill waste by 60% through proper recycling and composting</li>
-                    <li>Decrease carbon emissions from inefficient waste collection</li>
-                    <li>Conserve water and energy through optimized processing methods</li>
-                    <li>Create jobs in the circular economy</li>
-                  </ul>
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">⭐ Why Parivartan?</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { icon: '🤖', title: 'AI Waste Identification', desc: 'Smart camera identifies waste type in seconds' },
+                      { icon: '🎁', title: 'EcoPoints Rewards', desc: 'Earn points and redeem exciting vouchers' },
+                      { icon: '🤝', title: 'Community Driven', desc: 'Join thousands making a real difference' },
+                      { icon: '📊', title: 'Real Impact', desc: 'Track your environmental contribution' },
+                    ].map((item, i) => (
+                      <div key={i} className="bg-white rounded-xl p-4 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
+                        <div className="text-3xl mb-3">{item.icon}</div>
+                        <h5 className="font-bold text-gray-900 text-sm mb-1">{item.title}</h5>
+                        <p className="text-gray-500 text-xs">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Future Vision */}
-                <div>
-                  <h4 className="text-2xl font-semibold text-gray-900 mb-4">Our Vision</h4>
-                  <p className="text-gray-600 leading-relaxed">
-                    We envision a world where waste is not a problem but an opportunity. Through continuous
-                    innovation in AI and community engagement, Parivartan aims to create zero-waste cities
-                    while building sustainable livelihoods for waste management professionals worldwide.
-                  </p>
+                {/* Scale of Problem */}
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-2xl p-6 border-l-4 border-orange-400">
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">📊 The Scale of the Problem</h4>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    {[
+                      { value: '60M+', label: 'Tons of waste generated yearly', color: 'text-red-600' },
+                      { value: '60%', label: 'Waste that can be recycled', color: 'text-orange-600' },
+                      { value: '📈', label: 'Urban waste increasing rapidly', color: 'text-yellow-600' },
+                    ].map((stat, i) => (
+                      <div key={i} className="text-center bg-white rounded-xl p-4 shadow-sm">
+                        <div className={`text-2xl font-bold ${stat.color} mb-1`}>{stat.value}</div>
+                        <p className="text-gray-600 text-xs">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                    <p className="text-lg font-bold text-emerald-700">"Small actions create big impact ♻️"</p>
+                  </div>
                 </div>
 
-                {/* Call to Action */}
-                <div className="bg-gradient-to-r from-emerald-50 to-blue-50 p-6 rounded-xl">
-                  <h4 className="text-xl font-semibold text-gray-900 mb-2">Ready to Join the Revolution?</h4>
-                  <p className="text-gray-600 mb-4">
-                    Become a partner today and start making a difference while earning rewards.
-                  </p>
-                  <div className="flex gap-4">
+                {/* How to Use the App */}
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-6 border-l-4 border-emerald-500">
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">📘 How to Use the App?</h4>
+                  <div className="space-y-3">
+                    {[
+                      { icon: '👤', step: '1', title: 'Sign Up', desc: 'Sign up and set your pickup location' },
+                      { icon: '📸', step: '2', title: 'Identify Waste', desc: 'Identify waste using AI camera' },
+                      { icon: '🔎', step: '3', title: 'Choose a Recycler', desc: 'Choose a recycler partner near you' },
+                      { icon: '🏆', step: '4', title: 'Earn EcoPoints', desc: 'Complete pickups and earn EcoPoints' },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-start space-x-4 bg-white rounded-xl p-4 shadow-sm">
+                        <div className="w-8 h-8 bg-emerald-600 text-white text-sm font-bold rounded-full flex items-center justify-center flex-shrink-0">{item.step}</div>
+                        <div>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="text-xl">{item.icon}</span>
+                            <h5 className="font-bold text-gray-900">{item.title}</h5>
+                          </div>
+                          <p className="text-gray-500 text-sm">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* How Partners Use */}
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border-l-4 border-indigo-500">
+                  <h4 className="text-xl font-bold text-gray-900 mb-4">🤝 How Partners Use Parivartan?</h4>
+                  <div className="space-y-3">
+                    {[
+                      { icon: '📝', step: '1', title: 'Register as a Partner', desc: 'Sign up and create your recycler profile' },
+                      { icon: '📬', step: '2', title: 'Receive Pickup Requests', desc: 'Get assigned waste collection requests based on location and availability' },
+                      { icon: '✅', step: '3', title: 'Confirm Availability', desc: 'Check pickup details and confirm user availability before collection' },
+                      { icon: '🚛', step: '4', title: 'Collect and Process Waste', desc: 'Visit the location, collect waste, and process it responsibly' },
+                      { icon: '📊', step: '5', title: 'Track Performance', desc: 'Track your performance and monitor your environmental impact through the dashboard' },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-start space-x-4 bg-white rounded-xl p-4 shadow-sm">
+                        <div className="w-8 h-8 bg-indigo-600 text-white text-sm font-bold rounded-full flex items-center justify-center flex-shrink-0">{item.step}</div>
+                        <div>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="text-xl">{item.icon}</span>
+                            <h5 className="font-bold text-gray-900">{item.title}</h5>
+                          </div>
+                          <p className="text-gray-500 text-sm">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Multi Language */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-200 flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-3xl">🌐</span>
+                    <div>
+                      <h5 className="font-bold text-gray-900">Multi-Language Support</h5>
+                      <p className="text-gray-500 text-sm">Use Parivartan in your own language — Hindi, Tamil, Bengali & more</p>
+                    </div>
+                  </div>
+                  <span className="bg-purple-100 text-purple-700 text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap">🚀 Coming Soon</span>
+                </div>
+
+                {/* CTA */}
+                <div className="bg-gradient-to-r from-emerald-600 to-blue-600 rounded-2xl p-8 text-center text-white">
+                  <div className="text-4xl mb-3">♻️</div>
+                  <h4 className="text-2xl font-bold mb-2">Start Recycling Today</h4>
+                  <p className="text-emerald-100 mb-6">Join Parivartan and be part of the change India needs.</p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Link
                       to="/signup"
                       onClick={() => setShowLearnMore(false)}
-                      className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-emerald-700 hover:to-blue-700 transition-all duration-300"
+                      className="bg-white text-emerald-700 px-8 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-all duration-300 shadow-lg"
                     >
                       Become a Partner
                     </Link>
                     <button
                       onClick={() => setShowLearnMore(false)}
-                      className="border border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all duration-300"
+                      className="border-2 border-white text-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all duration-300"
                     >
                       Close
                     </button>
                   </div>
                 </div>
+
               </div>
             </div>
           </div>

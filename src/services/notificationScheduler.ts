@@ -1,44 +1,59 @@
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { dbService } from './dbService';
 
 export const notificationScheduler = {
-  // Check and send availability confirmations for pickups happening in 12 hours
-  async checkAndSendAvailabilityConfirmations() {
-    try {
-      // This would typically run as a scheduled job (e.g., Firebase Cloud Functions)
-      // For now, it can be called manually or on app load
-      
-      const now = new Date();
-      const twelveHoursLater = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-      
-      console.log('🔔 Checking for pickups requiring availability confirmation...');
-      
-      // Note: In production, you'd query scheduled pickups from Firestore
-      // and filter those happening in ~12 hours that haven't been confirmed yet
-      
-      return {
-        success: true,
-        message: 'Availability confirmation check completed'
-      };
-    } catch (error) {
-      console.error('Error checking availability confirmations:', error);
-      return {
-        success: false,
-        error
-      };
-    }
-  },
-
-  // Calculate time until pickup
   getHoursUntilPickup(scheduledDate: string, scheduledTime: string): number {
-    const pickupDateTime = new Date(`${scheduledDate}T${scheduledTime.split('-')[0]}`);
-    const now = new Date();
-    return (pickupDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const pickupDateTime = new Date(`${scheduledDate}T${scheduledTime.split('-')[0]}:00`);
+    return (pickupDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
   },
 
-  // Check if confirmation should be sent
-  shouldSendConfirmation(scheduledDate: string, scheduledTime: string): boolean {
-    const hoursUntil = this.getHoursUntilPickup(scheduledDate, scheduledTime);
-    // Send if pickup is between 11-13 hours away (12 hour window with 1 hour buffer)
-    return hoursUntil >= 11 && hoursUntil <= 13;
+  // Auto-check all scheduled pickups for this partner and send confirmation if ~12 hours away
+  async checkAndSendAvailabilityConfirmations(partnerId: string, partnerName: string) {
+    try {
+      // Query all In Progress requests for this partner that have a scheduled date
+      const q = query(
+        collection(db, 'wasteRequests'),
+        where('partnerId', '==', partnerId),
+        where('status', '==', 'In Progress')
+      );
+      const snapshot = await getDocs(q);
+
+      for (const docSnap of snapshot.docs) {
+        const request = { id: docSnap.id, ...docSnap.data() } as any;
+
+        if (!request.scheduledDate || !request.scheduledTime) continue;
+        if (request.confirmationStatus && request.confirmationStatus !== 'pending') continue;
+        if (request.confirmationSentAt) continue; // already sent
+
+        const hoursUntil = this.getHoursUntilPickup(request.scheduledDate, request.scheduledTime);
+
+        // Send if pickup is 11–13 hours away
+        if (hoursUntil >= 11 && hoursUntil <= 13) {
+          const userId = request.userId;
+          if (!userId) continue;
+
+          await dbService.sendAvailabilityConfirmation(
+            request.id,
+            partnerId,
+            userId,
+            request.scheduledDate,
+            request.scheduledTime,
+            partnerName,
+            request.phoneNumber || 'N/A'
+          );
+
+          // Mark confirmation as sent on the waste request
+          await dbService.updateWasteRequest(request.id, {
+            confirmationStatus: 'pending',
+            confirmationSentAt: new Date().toISOString()
+          } as any);
+
+          console.log(`✅ Auto-sent availability confirmation for request ${request.id}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkAndSendAvailabilityConfirmations:', error);
+    }
   }
 };

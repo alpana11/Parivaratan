@@ -454,9 +454,9 @@ export const dbService = {
 
   async sendAvailabilityConfirmation(requestId: string, partnerId: string, userId: string, pickupDate: string, pickupTime: string, partnerName: string, userPhone: string) {
     try {
+      // Only store userId — no partnerId so it doesn't appear in partner's notifications
       const notificationId = await this.createNotification({
         userId,
-        partnerId,
         type: 'availability_confirmation',
         category: 'availability_check',
         title: 'Are you available for pickup?',
@@ -465,6 +465,7 @@ export const dbService = {
         status: 'sent',
         metadata: {
           wasteRequestId: requestId,
+          partnerId,
           pickupDate,
           pickupTime,
           userPhone,
@@ -479,12 +480,25 @@ export const dbService = {
 
   async respondToAvailabilityConfirmation(notificationId: string, response: 'confirmed' | 'declined') {
     try {
-      const docRef = doc(db, 'notifications', notificationId);
-      await updateDoc(docRef, {
+      const notifRef = doc(db, 'notifications', notificationId);
+      const notifSnap = await getDoc(notifRef);
+      const notifData = notifSnap.data();
+
+      await updateDoc(notifRef, {
         status: response,
         respondedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+
+      // Sync confirmationStatus back to the waste request
+      const requestId = notifData?.metadata?.wasteRequestId;
+      if (requestId) {
+        const requestRef = doc(db, 'wasteRequests', requestId);
+        await updateDoc(requestRef, {
+          confirmationStatus: response === 'confirmed' ? 'confirmed' : 'not_available',
+          updatedAt: Timestamp.now(),
+        });
+      }
     } catch (error) {
       throw error;
     }

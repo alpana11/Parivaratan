@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WasteRequest } from '../types';
 import { useWasteRequests } from '../hooks/useData';
 import { dbService } from '../services/dbService';
+import { notificationScheduler } from '../services/notificationScheduler';
 import { useAuth } from '../hooks/useAuth';
 
 const AssignedWasteRequestsPage: React.FC = () => {
@@ -20,6 +21,16 @@ const AssignedWasteRequestsPage: React.FC = () => {
   useEffect(() => {
     setLocalRequests(requests);
   }, [requests]);
+
+  // Auto-check and send availability confirmations on mount and every hour
+  useEffect(() => {
+    if (!user || !partner) return;
+    notificationScheduler.checkAndSendAvailabilityConfirmations(user.uid, partner.name);
+    const interval = setInterval(() => {
+      notificationScheduler.checkAndSendAvailabilityConfirmations(user.uid, partner.name);
+    }, 60 * 60 * 1000); // re-check every hour
+    return () => clearInterval(interval);
+  }, [user, partner]);
 
   const handleSchedulePickup = (requestId: string) => {
     setRequestToSchedule(requestId);
@@ -100,43 +111,24 @@ const AssignedWasteRequestsPage: React.FC = () => {
 
     try {
       const request = requests.find(r => r.id === requestId);
-      if (!request) {
-        alert('Request not found');
-        return;
-      }
+      if (!request) { alert('Request not found'); return; }
 
       const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
       const userPhone = request.phoneNumber || (request as any).userPhone || 'N/A';
-      
-      if (!userId) {
-        alert('User information not found');
-        return;
-      }
 
-      const pickupDateTime = new Date(`${scheduledDate}T${scheduledTime.split('-')[0]}`);
-      const now = new Date();
-      const hoursUntilPickup = (pickupDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-      if (hoursUntilPickup > 12) {
-        const confirmSend = window.confirm(
-          `Pickup is scheduled in ${Math.round(hoursUntilPickup)} hours. ` +
-          `It's recommended to ask 12 hours before pickup. ` +
-          `Do you want to ask the user now anyway?`
-        );
-        if (!confirmSend) return;
-      }
+      if (!userId) { alert('User information not found'); return; }
 
       await dbService.sendAvailabilityConfirmation(
-        requestId,
-        user.uid,
-        userId,
-        scheduledDate,
-        scheduledTime,
-        partner.name,
-        userPhone
+        requestId, user.uid, userId, scheduledDate, scheduledTime, partner.name, userPhone
       );
 
-      alert('✅ Availability question sent to user! They will receive a notification to confirm or decline.');
+      // Mark confirmationSentAt on the waste request
+      await dbService.updateWasteRequest(requestId, {
+        confirmationStatus: 'pending',
+        confirmationSentAt: new Date().toISOString()
+      } as any);
+
+      alert('✅ Availability question sent to user!');
     } catch (error) {
       console.error('Error sending availability question:', error);
       alert('Failed to send question to user');
@@ -365,6 +357,36 @@ const AssignedWasteRequestsPage: React.FC = () => {
                             <span className="font-bold text-emerald-900">Scheduled:</span> 
                             <span className="text-lg ml-2">{new Date(request.scheduledDate).toLocaleDateString()} at {request.scheduledTime}</span>
                             <span className="ml-2 text-sm text-emerald-700">({request.scheduleMethod === 'pickup' ? '🚚 Pickup' : '📍 Drop-off'})</span>
+                          </div>
+                        )}
+                        {request.scheduledDate && (
+                          <div className="col-span-2 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                              <span className="font-bold text-gray-900 text-sm block mb-1">User Availability</span>
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
+                                (request as any).confirmationStatus === 'confirmed'
+                                  ? 'bg-green-100 text-green-800'
+                                  : (request as any).confirmationStatus === 'not_available'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {(request as any).confirmationStatus === 'confirmed'
+                                  ? '✓ Confirmed'
+                                  : (request as any).confirmationStatus === 'not_available'
+                                  ? '✗ Not Available'
+                                  : (request as any).confirmationSentAt
+                                  ? '⏳ Awaiting Response'
+                                  : '— Not Asked Yet'}
+                              </span>
+                            </div>
+                            {!(request as any).confirmationSentAt && (
+                              <button
+                                onClick={() => handleSendAvailabilityConfirmation(request.id, request.scheduledDate!, request.scheduledTime!)}
+                                className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                              >
+                                Ask User Now
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
