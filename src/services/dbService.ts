@@ -490,13 +490,35 @@ export const dbService = {
         updatedAt: Timestamp.now(),
       });
 
-      // Sync confirmationStatus back to the waste request
       const requestId = notifData?.metadata?.wasteRequestId;
+      const partnerId = notifData?.metadata?.partnerId;
+      const pickupDate = notifData?.metadata?.pickupDate;
+      const pickupTime = notifData?.metadata?.pickupTime;
+
+      // Sync confirmationStatus back to the waste request
       if (requestId) {
         const requestRef = doc(db, 'wasteRequests', requestId);
         await updateDoc(requestRef, {
           confirmationStatus: response === 'confirmed' ? 'confirmed' : 'not_available',
           updatedAt: Timestamp.now(),
+        });
+      }
+
+      // Notify the partner about the user's response
+      if (partnerId) {
+        const isConfirmed = response === 'confirmed';
+        await addDoc(collection(db, 'notifications'), {
+          partnerId,
+          type: 'availability_response',
+          title: isConfirmed ? '✅ User Confirmed Availability' : '❌ User Not Available',
+          message: isConfirmed
+            ? `The user has confirmed they will be available for the pickup on ${pickupDate ? new Date(pickupDate).toLocaleDateString() : ''} at ${pickupTime || ''}.`
+            : `The user is not available for the pickup on ${pickupDate ? new Date(pickupDate).toLocaleDateString() : ''} at ${pickupTime || ''}. Please reschedule.`,
+          status: 'sent',
+          priority: 'high',
+          category: 'availability_response',
+          metadata: { wasteRequestId: requestId, response },
+          createdAt: Timestamp.now(),
         });
       }
     } catch (error) {

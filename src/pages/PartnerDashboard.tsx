@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
@@ -10,6 +10,8 @@ const PartnerDashboard: React.FC = () => {
   const { user, partner, loading } = useAuth();
   const [loadTimeout, setLoadTimeout] = React.useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const prevUnreadRef = useRef(0);
+  const isFirstLoadRef = useRef(true);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -24,10 +26,19 @@ const PartnerDashboard: React.FC = () => {
     if (!user?.uid) return;
     const unsubscribe = dbService.subscribeToPartnerNotifications(user.uid, (notifications) => {
       const unread = notifications.filter(n => !n.readAt).length;
+
+      // Skip sound on initial load, only play for genuinely new notifications
+      if (!isFirstLoadRef.current && unread > prevUnreadRef.current) {
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3')
+          .play().catch(() => {});
+      }
+
+      isFirstLoadRef.current = false;
+      prevUnreadRef.current = unread;
       setUnreadCount(unread);
     });
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   const demoAuth = localStorage.getItem('partnerAuth');
   const demoPartner = localStorage.getItem('demoPartner');

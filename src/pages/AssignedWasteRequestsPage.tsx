@@ -110,7 +110,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
     if (!user || !partner) return;
 
     try {
-      const request = requests.find(r => r.id === requestId);
+      const request = localRequests.find(r => r.id === requestId);
       if (!request) { alert('Request not found'); return; }
 
       const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
@@ -118,11 +118,15 @@ const AssignedWasteRequestsPage: React.FC = () => {
 
       if (!userId) { alert('User information not found'); return; }
 
+      // Optimistically hide the button immediately
+      setLocalRequests(prev => prev.map(r =>
+        r.id === requestId ? { ...r, confirmationSentAt: new Date().toISOString(), confirmationStatus: 'pending' } as any : r
+      ));
+
       await dbService.sendAvailabilityConfirmation(
         requestId, user.uid, userId, scheduledDate, scheduledTime, partner.name, userPhone
       );
 
-      // Mark confirmationSentAt on the waste request
       await dbService.updateWasteRequest(requestId, {
         confirmationStatus: 'pending',
         confirmationSentAt: new Date().toISOString()
@@ -131,6 +135,8 @@ const AssignedWasteRequestsPage: React.FC = () => {
       alert('✅ Availability question sent to user!');
     } catch (error) {
       console.error('Error sending availability question:', error);
+      // Revert optimistic update on failure
+      setLocalRequests(requests);
       alert('Failed to send question to user');
     }
   };
@@ -354,9 +360,8 @@ const AssignedWasteRequestsPage: React.FC = () => {
                         </div>
                         {request.scheduledDate && request.scheduledTime && (
                           <div className="col-span-2 bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200">
-                            <span className="font-bold text-emerald-900">Scheduled:</span> 
+                            <span className="font-bold text-emerald-900">Scheduled:</span>
                             <span className="text-lg ml-2">{new Date(request.scheduledDate).toLocaleDateString()} at {request.scheduledTime}</span>
-                            <span className="ml-2 text-sm text-emerald-700">({request.scheduleMethod === 'pickup' ? '🚚 Pickup' : '📍 Drop-off'})</span>
                           </div>
                         )}
                         {request.scheduledDate && (
@@ -732,7 +737,6 @@ const AssignedWasteRequestsPage: React.FC = () => {
 };
 
 const ScheduleForm: React.FC<{ onSubmit: (data: { method: 'pickup' | 'dropoff'; date: string; time: string }) => void }> = ({ onSubmit }) => {
-  const [method, setMethod] = useState<'pickup' | 'dropoff'>('pickup');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
 
@@ -742,37 +746,11 @@ const ScheduleForm: React.FC<{ onSubmit: (data: { method: 'pickup' | 'dropoff'; 
       alert('Please select date and time');
       return;
     }
-    onSubmit({ method, date, time });
+    onSubmit({ method: 'pickup', date, time });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label className="block text-sm font-bold text-gray-700 mb-3">Collection Method</label>
-        <div className="space-y-3">
-          <label className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer">
-            <input
-              type="radio"
-              value="pickup"
-              checked={method === 'pickup'}
-              onChange={(e) => setMethod(e.target.value as 'pickup')}
-              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="ml-3 text-sm font-medium text-gray-700">🚚 Pickup from Location</span>
-          </label>
-          <label className="flex items-center p-3 border rounded-xl hover:bg-gray-50 cursor-pointer">
-            <input
-              type="radio"
-              value="dropoff"
-              checked={method === 'dropoff'}
-              onChange={(e) => setMethod(e.target.value as 'dropoff')}
-              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="ml-3 text-sm font-medium text-gray-700">📍 Drop-off at Center</span>
-          </label>
-        </div>
-      </div>
-
       <div>
         <label className="block text-sm font-bold text-gray-700 mb-2">Date</label>
         <input

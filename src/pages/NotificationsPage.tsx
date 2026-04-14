@@ -8,28 +8,15 @@ const NotificationsPage: React.FC = () => {
   const { streamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [updateCount, setUpdateCount] = useState(0);
-  const [prevCount, setPrevCount] = useState(0);
 
   useEffect(() => {
     if (!partner?.id) return;
-
-    // Direct Firebase listener
     const unsubscribe = dbService.subscribeToPartnerNotifications(partner.id, (data) => {
-      const unreadCount = data.filter(n => !n.readAt).length;
-      
-      // Play sound if new unread notification
-      if (unreadCount > prevCount) {
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
-        audio.play().catch(e => console.log('Audio play failed:', e));
-      }
-      
-      setPrevCount(unreadCount);
       setNotifications(data);
       setUpdateCount(prev => prev + 1);
     });
-
     return () => unsubscribe();
-  }, [partner, prevCount]);
+  }, [partner?.id]);
 
   const markAsRead = async (id: string) => {
     try {
