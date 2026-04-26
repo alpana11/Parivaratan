@@ -2,18 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
 import { useWasteRequests } from '../hooks/useData';
+import { useToast } from '../components/Toast';
+import { ScheduledPickup, NearbyArea } from '../types';
 
 const LocationRoutesPage: React.FC = () => {
   const { partner } = useAuth();
   const { streamActive, updateCount } = useWasteRequests();
-  const [selectedArea, setSelectedArea] = useState<string>('all');
+  const { showToast } = useToast();
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationAddress, setLocationAddress] = useState<string>('');
-  const [nearbyAreas, setNearbyAreas] = useState<any[]>([]);
+  const [nearbyAreas, setNearbyAreas] = useState<NearbyArea[]>([]);
   const [locationError, setLocationError] = useState<string>('');
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduledPickups, setScheduledPickups] = useState<any[]>([]);
+  const [scheduledPickups, setScheduledPickups] = useState<ScheduledPickup[]>([]);
   const [scheduleData, setScheduleData] = useState({
     area: '',
     date: '',
@@ -154,7 +156,7 @@ const LocationRoutesPage: React.FC = () => {
       console.log('✅ Scheduled pickup completed and deleted:', pickupId);
     } catch (error) {
       console.error('❌ Error completing pickup:', error);
-      alert('Failed to complete pickup');
+      showToast('Failed to complete pickup', 'error');
     }
   };
 
@@ -185,12 +187,12 @@ const LocationRoutesPage: React.FC = () => {
       const pickupId = await dbService.createScheduledPickup(newPickup);
       console.log('✅ Scheduled pickup saved with ID:', pickupId);
       
-      alert(`Waste collection scheduled for ${scheduleData.area} on ${scheduleData.date} at ${scheduleData.time}`);
+      showToast(`Waste collection scheduled for ${scheduleData.area} on ${scheduleData.date} at ${scheduleData.time}`, 'success');
       setShowScheduleModal(false);
       setScheduleData({ area: '', date: '', time: '', notes: '' });
     } catch (error) {
       console.error('❌ Error scheduling pickup:', error);
-      alert('Failed to schedule pickup. Check console for details.');
+      showToast('Failed to schedule pickup', 'error');
     }
   };
 
@@ -205,7 +207,6 @@ const LocationRoutesPage: React.FC = () => {
   ];
 
   // Mock nearby requests (within 5km radius)
-  const nearbyRequests = ([] as any[]);
 
   return (
     <div className="space-y-8">

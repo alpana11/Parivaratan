@@ -1,6 +1,6 @@
 export type PartnerStatus = 'pending' | 'approved' | 'rejected' | 'subscription_required';
 export type SubscriptionStatus = 'none' | 'pending' | 'active' | 'expired';
-export type SubscriptionDuration = 'monthly' | 'yearly';
+export type SubscriptionDuration = 'monthly' | 'quarterly' | 'half-yearly' | 'yearly';
 
 export interface SubscriptionPlan {
   id: string;
@@ -21,23 +21,37 @@ export interface PartnerSubscription {
   transactionId?: string;
 }
 
-export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected' | 'In Progress' | 'Completed';
+export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected' | 'In Progress' | 'Completed' | 'Assigned' | 'Requested';
+
+export interface Location {
+  house?: string;
+  street?: string;
+  city?: string;
+  pincode?: string;
+}
 
 export interface WasteRequest {
   id: string;
   userId: string;
   partnerId: string;
   image: string;
+  imageUrl?: string;
   type: string;
+  wasteType?: string;
   phoneNumber: string;
+  userPhone?: string;
+  userName?: string;
   quantity: string;
-  location: string;
+  itemCount?: number;
+  location: string | Location;
   status: WasteRequestStatus;
   createdAt: string;
   date: string;
   scheduleMethod?: 'pickup' | 'dropoff';
   scheduledDate?: string;
   scheduledTime?: string;
+  confirmationStatus?: 'pending' | 'confirmed' | 'not_available';
+  confirmationSentAt?: string;
 }
 
 export interface ImpactMetrics {
@@ -134,14 +148,6 @@ export interface RewardTransaction {
   usageDeadline?: string; // 20 days from redemption for vouchers
 }
 
-export interface SubscriptionPlan {
-  id: string;
-  name: string;
-  amount: number;
-  duration: 'monthly' | 'yearly';
-  isActive: boolean;
-}
-
 export interface AdminUser {
   id: string;
   email: string;
@@ -211,9 +217,40 @@ export interface User {
   createdAt: string;
 }
 
-export interface PickupSchedule {
+export interface ScheduledPickup {
   id: string;
+  partnerId: string;
+  requestId?: string;
   area: string;
+  date: string;
+  time: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  scheduleMethod?: 'pickup' | 'dropoff';
+  userName?: string;
+  userPhone?: string;
+  phoneNumber?: string;
+  location?: string | Location;
+  type?: string;
+  wasteType?: string;
+  image?: string;
+  imageUrl?: string;
+  quantity?: string;
+  notes?: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface NearbyArea {
+  id: string;
+  name: string;
+  fullName: string;
+  lat: number;
+  lng: number;
+  distance: string;
+}
+  id: string;
+  area: string | Location;
   date: string; // ISO date string
   timeSlot: string; // e.g., "09:00-11:00"
   assignedPartnerId: string;
@@ -225,7 +262,7 @@ export interface PickupSchedule {
 }
 
 export interface AreaSchedule {
-  area: string;
+  area: string | Location;
   schedules: PickupSchedule[];
   assignedPartners: string[]; // Partner IDs assigned to this area
   capacity: number; // Max pickups per day

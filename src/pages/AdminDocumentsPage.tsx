@@ -141,21 +141,6 @@ const AdminDocumentsPage: React.FC = () => {
     setShowVerificationModal(true);
   };
 
-  const downloadDocument = (doc: PartnerDocument) => {
-    if (doc.url.startsWith('data:')) {
-      // Handle base64 data URL
-      const link = document.createElement('a');
-      link.href = doc.url;
-      link.download = `${doc.type}_${new Date(doc.uploadedAt).toISOString().split('T')[0]}.png`; // Assuming PNG for base64
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      // Handle regular URL
-      window.open(doc.url, '_blank');
-    }
-  };
-
   const getDocumentFilename = (doc: PartnerDocument) => {
     if (doc.url.startsWith('data:')) {
       // For base64, create a filename based on type and date

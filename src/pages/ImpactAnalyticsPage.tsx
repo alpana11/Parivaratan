@@ -17,18 +17,15 @@ import {
   AreaChart
 } from 'recharts';
 import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
-import { dbService } from '../services/dbService';
-import { useAuth } from '../hooks/useAuth';
 
 const ImpactAnalyticsPage: React.FC = () => {
-  const { user } = useAuth();
   const { requests, streamActive: pathwayStreamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const { metrics } = useImpactMetrics();
 
   const completedRequests = requests.filter(req => (req.status || '').toLowerCase() === 'completed');
   const wasteByType = completedRequests.reduce((acc, req) => {
-    const wasteType = req.type || req.wasteType || 'Unknown';
-    const quantity = parseInt(req.quantity || req.itemCount || '0');
+    const wasteType = req.type || 'Unknown';
+    const quantity = parseInt(req.quantity || '0');
     acc[wasteType] = (acc[wasteType] || 0) + quantity;
     return acc;
   }, {} as Record<string, number>);
@@ -174,7 +171,7 @@ const ImpactAnalyticsPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"

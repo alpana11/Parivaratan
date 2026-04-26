@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
+import { useToast } from '../components/Toast';
 
 const MakePaymentPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, refreshPartner } = useAuth();
+  const { showToast } = useToast();
   const [processing, setProcessing] = useState(false);
 
   const selectedPlan = location.state?.selectedPlan;
@@ -18,7 +20,7 @@ const MakePaymentPage: React.FC = () => {
 
   const handlePayment = async () => {
     if (!user) {
-      alert('Please sign in to continue');
+      showToast('Please sign in to continue', 'warning');
       return;
     }
 
@@ -53,12 +55,12 @@ const MakePaymentPage: React.FC = () => {
       // Refresh partner data to reflect the updated subscription status
       await refreshPartner();
 
-      alert(`🎉 Payment Successful!\\n\\n💳 Plan: ${selectedPlan.name}\\n💰 Amount: ₹${selectedPlan.price}\\n🔓 Dashboard access unlocked!`);
+      showToast(`Payment Successful! Plan: ${selectedPlan.name} | Amount: ₹${selectedPlan.price} | Dashboard access unlocked!`, 'success');
 
       navigate('/dashboard');
     } catch (error) {
       console.error('Payment error:', error);
-      alert('Payment failed. Please try again.');
+      showToast('Payment failed. Please try again.', 'error');
     } finally {
       setProcessing(false);
     }

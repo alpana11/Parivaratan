@@ -116,13 +116,12 @@ const PartnerSignUpPage: React.FC = () => {
 
       // Move to step 3 (subscription selection)
       setCurrentStep(3);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Sign up error:', error);
       let errorMessage = 'Failed to create account';
-      
-      // Handle Firebase Auth specific errors
-      if (error.code) {
-        switch (error.code) {
+      const err = error as { code?: string; message?: string };
+      if (err.code) {
+        switch (err.code) {
           case 'auth/email-already-in-use':
             errorMessage = 'This email is already registered. Please use a different email.';
             break;
@@ -139,7 +138,7 @@ const PartnerSignUpPage: React.FC = () => {
             errorMessage = 'Too many requests. Please try again later.';
             break;
           default:
-            errorMessage = error.message || 'Failed to create account';
+            errorMessage = err.message || 'Failed to create account';
         }
       }
       

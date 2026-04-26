@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
+import { useToast } from '../components/Toast';
+
+interface LocalPlan {
+  id: string;
+  name: string;
+  price: number;
+  duration: string;
+  features: string[];
+  popular: boolean;
+}
 
 const SubscriptionPlansPage: React.FC = () => {
-  const { user } = useAuth();
-  const [plans, setPlans] = useState<any[]>([]);
-  const [selectedPlan, setSelectedPlan] = useState<string>('');
-  const [processing, setProcessing] = useState(false);
+  const [plans, setPlans] = useState<LocalPlan[]>([]);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   useEffect(() => {
     // Load plans from database with real-time updates
@@ -81,7 +88,7 @@ const SubscriptionPlansPage: React.FC = () => {
   const handlePlanSelection = (planId: string) => {
     const selectedPlanData = plans.find(p => p.id === planId);
     if (!selectedPlanData) {
-      alert('Plan not found');
+      showToast('Plan not found', 'error');
       return;
     }
 
@@ -135,7 +142,7 @@ const SubscriptionPlansPage: React.FC = () => {
               </div>
 
               <ul className="space-y-3 mb-6 flex-1">
-                {plan.features.map((feature, index) => (
+                {plan.features.map((feature: string, index: number) => (
                   <li key={index} className="flex items-start">
                     <svg className="w-5 h-5 text-emerald-500 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -147,24 +154,13 @@ const SubscriptionPlansPage: React.FC = () => {
 
               <button
                 onClick={() => handlePlanSelection(plan.id)}
-                disabled={processing && selectedPlan === plan.id}
                 className={`w-full py-3 px-6 rounded-xl font-semibold transition-all duration-200 ${
                   plan.popular
                     ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                     : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                } ${processing && selectedPlan === plan.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
-                {processing && selectedPlan === plan.id ? (
-                  <div className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing Payment...
-                  </div>
-                ) : (
-                  `Select ${plan.name}`
-                )}
+                Select {plan.name}
               </button>
             </div>
           ))}

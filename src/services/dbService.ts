@@ -15,7 +15,7 @@ import {
   increment
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction, Partner, Notification, AuditLog, RewardRule, RewardCampaign } from '../types';
+import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction, Partner, Notification, AuditLog, RewardRule, RewardCampaign, SubscriptionPlan } from '../types';
 
 export const dbService = {
   async createWasteRequest(request: Omit<WasteRequest, 'id'>) {
@@ -463,6 +463,7 @@ export const dbService = {
         message: `${partnerName} is asking: Will you be available for waste pickup on ${new Date(pickupDate).toLocaleDateString()} at ${pickupTime}? Please confirm or decline.`,
         priority: 'high',
         status: 'sent',
+        createdAt: new Date().toISOString(),
         metadata: {
           wasteRequestId: requestId,
           partnerId,
@@ -714,7 +715,6 @@ export const dbService = {
       });
     } catch (error) {
       // If document doesn't exist, create it
-      const docRef = doc(db, 'partnerData', partnerId);
       await addDoc(collection(db, 'partnerData'), {
         partnerId,
         ...data,
@@ -1130,7 +1130,7 @@ export const dbService = {
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt
-      })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      })).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       callback(pickups);
     });
   },
@@ -1218,7 +1218,6 @@ export const dbService = {
       });
     } catch (error) {
       // If document doesn't exist, create it
-      const docRef = doc(db, 'users', userId);
       await addDoc(collection(db, 'users'), {
         ...userData,
         createdAt: Timestamp.now(),

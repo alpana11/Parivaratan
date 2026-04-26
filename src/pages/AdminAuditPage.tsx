@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { AuditLog, Partner, WasteRequest } from '../types';
-import { useAuth } from '../hooks/useAuth';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 const AdminAuditPage: React.FC = () => {
-  const { admin } = useAuth();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [wasteRequests, setWasteRequests] = useState<WasteRequest[]>([]);
@@ -63,7 +61,11 @@ const AdminAuditPage: React.FC = () => {
       const endDate = new Date(dateRange.end);
       endDate.setHours(23, 59, 59, 999); // End of day
 
-      const filteredLogs = await dbService.getAuditLogsByDateRange(startDate, endDate);
+      const allLogs = await dbService.getAllAuditLogs();
+      const filteredLogs = allLogs.filter(log => {
+        const logTime = new Date(log.timestamp);
+        return logTime >= startDate && logTime <= endDate;
+      });
       setAuditLogs(filteredLogs);
     } catch (error) {
       console.error('Error filtering by date range:', error);
@@ -231,7 +233,7 @@ const AdminAuditPage: React.FC = () => {
           </div>
           <div className="bg-white p-4 rounded-lg shadow border">
             <div className="text-2xl font-bold text-red-600">
-              {auditLogs.filter(log => log.actionType === 'reject').length}
+              {auditLogs.filter(log => log.actionType === 'delete').length}
             </div>
             <div className="text-sm text-gray-600">Reject Actions</div>
             <div className="text-xs text-gray-400 mt-1">
@@ -239,7 +241,7 @@ const AdminAuditPage: React.FC = () => {
                 const logTime = new Date(log.timestamp);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                return logTime > today && log.actionType === 'reject';
+                return logTime > today && log.actionType === 'delete';
               }).length} today
             </div>
           </div>

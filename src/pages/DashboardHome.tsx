@@ -4,8 +4,15 @@ import { useAuth } from '../hooks/useAuth';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 
+interface Analysis {
+  totalRequests: number;
+  topWasteType: string;
+  topArea: string;
+  recommendations: string[];
+}
+
 const DashboardHome: React.FC = () => {
-  const { partner, user } = useAuth();
+  const { partner } = useAuth();
   useEffect(() => { AOS.init({ duration: 600, once: true }); }, []);
   const { requests, streamActive: pathwayStreamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const { metrics } = useImpactMetrics();
@@ -27,7 +34,7 @@ const DashboardHome: React.FC = () => {
   });
 
   // AI insights disabled on partner dashboard (available in AI Summary page)
-  const analysis = null;
+  const analysis: Analysis | null = null;
   const insightsLoading = false;
 
   if (!partner) {
@@ -140,30 +147,30 @@ const DashboardHome: React.FC = () => {
             <div className="bg-white rounded-lg p-4 border border-purple-100">
               <div className="text-sm text-gray-600">Success Rate</div>
               <div className="text-2xl font-bold text-purple-600">
-                {analysis.totalRequests > 0 
-                  ? Math.round((requests.filter(r => r.status === 'Completed').length / analysis.totalRequests) * 100)
+                {(analysis as Analysis)?.totalRequests > 0 
+                  ? Math.round((requests.filter(r => r.status === 'Completed').length / (analysis as Analysis).totalRequests) * 100)
                   : 0}%
               </div>
             </div>
             <div className="bg-white rounded-lg p-4 border border-purple-100">
               <div className="text-sm text-gray-600">Top Waste Type</div>
-              <div className="text-lg font-bold text-purple-600">{analysis.topWasteType || 'N/A'}</div>
+              <div className="text-lg font-bold text-purple-600">{(analysis as Analysis)?.topWasteType || 'N/A'}</div>
             </div>
             <div className="bg-white rounded-lg p-4 border border-purple-100">
               <div className="text-sm text-gray-600">Most Active Area</div>
-              <div className="text-lg font-bold text-purple-600">{analysis.topArea || 'N/A'}</div>
+              <div className="text-lg font-bold text-purple-600">{(analysis as Analysis)?.topArea || 'N/A'}</div>
             </div>
           </div>
 
           {/* AI Recommendations */}
-          {analysis.recommendations && analysis.recommendations.length > 0 && (
+          {(analysis as Analysis)?.recommendations && (analysis as Analysis).recommendations.length > 0 && (
             <div className="bg-white rounded-lg p-4 border border-purple-100">
               <h3 className="font-semibold text-gray-900 mb-2 flex items-center">
                 <span className="mr-2">💡</span>
                 AI Recommendations for You
               </h3>
               <div className="space-y-2">
-                {analysis.recommendations.slice(0, 3).map((rec: string, index: number) => (
+                {(analysis as Analysis).recommendations.slice(0, 3).map((rec: string, index: number) => (
                   <div key={index} className="flex items-start text-sm text-gray-700">
                     <span className="text-purple-500 mr-2">→</span>
                     <span>{rec}</span>

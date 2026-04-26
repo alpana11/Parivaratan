@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import { Partner, PartnerDocument } from '../types';
+import { Partner } from '../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { useToast } from '../components/Toast';
 
 const AdminDocumentVerificationPage: React.FC = () => {
+  const { showToast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [remarks, setRemarks] = useState('');
-  const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
 
   useEffect(() => {
@@ -24,7 +25,7 @@ const AdminDocumentVerificationPage: React.FC = () => {
     try {
       const partner = partners.find(p => p.id === partnerId);
       if (!partner || !partner.documents || !Array.isArray(partner.documents) || partner.documents.length === 0) {
-        alert('No documents found to approve');
+        showToast('No documents found to approve', 'warning');
         return;
       }
 
@@ -52,10 +53,10 @@ const AdminDocumentVerificationPage: React.FC = () => {
       });
 
       setRemarks('');
-      alert('All documents approved!');
+      showToast('All documents approved!', 'success');
     } catch (error) {
       console.error('Error approving documents:', error);
-      alert('Failed to approve documents: ' + (error as Error).message);
+      showToast('Failed to approve documents', 'error');
     }
   };
 
@@ -63,7 +64,7 @@ const AdminDocumentVerificationPage: React.FC = () => {
     try {
       const partner = partners.find(p => p.id === partnerId);
       if (!partner || !partner.documents || !Array.isArray(partner.documents) || partner.documents.length === 0) {
-        alert('No documents found to reject');
+        showToast('No documents found to reject', 'warning');
         return;
       }
 
@@ -91,10 +92,10 @@ const AdminDocumentVerificationPage: React.FC = () => {
       });
 
       setRemarks('');
-      alert('All documents rejected!');
+      showToast('All documents rejected', 'info');
     } catch (error) {
       console.error('Error rejecting documents:', error);
-      alert('Failed to reject documents: ' + (error as Error).message);
+      showToast('Failed to reject documents', 'error');
     }
   };
 
@@ -102,20 +103,19 @@ const AdminDocumentVerificationPage: React.FC = () => {
     try {
       // Update local state immediately
       setPartners(prev => prev.map(p =>
-        p.id === partnerId ? { ...p, verificationStatus: action, status: action === 'approved' ? 'verified' : 'rejected' } : p
+        p.id === partnerId ? { ...p, verificationStatus: action } : p
       ));
       if (selectedPartner?.id === partnerId) {
-        setSelectedPartner({ ...selectedPartner, verificationStatus: action, status: action === 'approved' ? 'verified' : 'rejected' });
+        setSelectedPartner({ ...selectedPartner, verificationStatus: action });
       }
 
       await updateDoc(doc(db, 'partners', partnerId), {
-        verificationStatus: action,
-        status: action === 'approved' ? 'verified' : 'rejected'
+        verificationStatus: action
       });
-      alert(`Partner ${action}!`);
+      showToast(`Partner ${action}!`, 'success');
     } catch (error) {
       console.error('Error updating partner:', error);
-      alert('Failed to update partner');
+      showToast('Failed to update partner', 'error');
     }
   };
 
@@ -166,7 +166,7 @@ const AdminDocumentVerificationPage: React.FC = () => {
                   filter === 'verified' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                Verified ({partners.filter(p => p.verificationStatus === 'verified').length})
+                Verified ({partners.filter(p => p.verificationStatus === 'approved').length})
               </button>
               <button
                 onClick={() => setFilter('rejected')}
@@ -215,11 +215,6 @@ const AdminDocumentVerificationPage: React.FC = () => {
                     <p className="text-xs text-gray-400">
                       Documents: {partner.documents?.length || 0} | Email: {partner.email}
                     </p>
-                    {partner.registrationDate && (
-                      <p className="text-xs text-gray-400">
-                        Registered: {new Date(partner.registrationDate).toLocaleDateString()}
-                      </p>
-                    )}
                   </div>
                 ))}
               </div>
@@ -234,11 +229,6 @@ const AdminDocumentVerificationPage: React.FC = () => {
                   <div>
                     <h2 className="text-2xl font-bold">{selectedPartner.name}</h2>
                     <p className="text-gray-600">{selectedPartner.organization}</p>
-                    {selectedPartner.registrationDate && (
-                      <p className="text-sm text-gray-500">
-                        {selectedPartner.partnerType} • Registered: {new Date(selectedPartner.registrationDate).toLocaleDateString()}
-                      </p>
-                    )}
                   </div>
                   <div className="flex items-center space-x-3">
                     <span className={`px-3 py-1 rounded-full ${getStatusColor(selectedPartner.verificationStatus || 'pending')}`}>

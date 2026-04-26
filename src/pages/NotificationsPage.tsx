@@ -2,18 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { dbService } from '../services/dbService';
 import { useWasteRequests } from '../hooks/useData';
+import { useToast } from '../components/Toast';
 
 const NotificationsPage: React.FC = () => {
   const { partner } = useAuth();
   const { streamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [updateCount, setUpdateCount] = useState(0);
+  const { showToast } = useToast();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     if (!partner?.id) return;
     const unsubscribe = dbService.subscribeToPartnerNotifications(partner.id, (data) => {
       setNotifications(data);
-      setUpdateCount(prev => prev + 1);
     });
     return () => unsubscribe();
   }, [partner?.id]);
@@ -46,10 +46,10 @@ const NotificationsPage: React.FC = () => {
         ? 'confirmed your availability! The partner will proceed with the pickup.' 
         : 'declined. The partner will contact you to reschedule.';
       
-      alert(`✅ You have ${responseText}`);
+      showToast(`You have ${responseText}`, 'success');
     } catch (error) {
       console.error('Error responding to availability confirmation:', error);
-      alert('Failed to send response');
+      showToast('Failed to send response', 'error');
     }
   };
 
@@ -62,6 +62,17 @@ const NotificationsPage: React.FC = () => {
       );
     } catch (error) {
       console.error('Error marking all as read:', error);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    try {
+      await Promise.all(notifications.map(n => dbService.deleteNotification(n.id)));
+      setNotifications([]);
+      showToast('All notifications cleared', 'success');
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+      showToast('Failed to clear notifications', 'error');
     }
   };
 
@@ -82,13 +93,23 @@ const NotificationsPage: React.FC = () => {
           </div>
           <p className="text-gray-600">Stay updated with your activities and system messages</p>
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={markAllAsRead}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
-          >
-            Mark All as Read
-          </button>
+        {notifications.length > 0 && (
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
+              >
+                Mark All as Read
+              </button>
+            )}
+            <button
+              onClick={clearAllNotifications}
+              className="inline-flex items-center px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50 transition-colors"
+            >
+              Clear All
+            </button>
+          </div>
         )}
       </div>
 

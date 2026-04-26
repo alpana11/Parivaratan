@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+interface VerificationData {
+  status: 'verified' | 'rejected' | 'pending';
+  verifiedAt: string;
+}
+
 const VerificationStatusPage: React.FC = () => {
-  const [verificationStatus, setVerificationStatus] = useState<any>(null);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationData | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 

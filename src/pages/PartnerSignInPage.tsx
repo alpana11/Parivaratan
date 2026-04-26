@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { useToast } from '../components/Toast';
 
 const PartnerSignInPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -14,6 +15,7 @@ const PartnerSignInPage: React.FC = () => {
   const [resetEmail, setResetEmail] = useState('');
   const navigate = useNavigate();
   const { signIn, googleSignIn, partner } = useAuth();
+  const { showToast } = useToast();
 
   // Handle navigation after sign-in when partner data is loaded
   useEffect(() => {
@@ -36,17 +38,18 @@ const PartnerSignInPage: React.FC = () => {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetEmail) {
-      alert('Please enter your email');
+      showToast('Please enter your email', 'warning');
       return;
     }
     setLoading(true);
     try {
       await sendPasswordResetEmail(auth, resetEmail);
-      alert('Password reset email sent! Check your inbox.');
+      showToast('Password reset email sent! Check your inbox.', 'success');
       setShowForgotPassword(false);
       setResetEmail('');
-    } catch (error: any) {
-      alert(error.message || 'Failed to send reset email');
+    } catch (error) {
+      const err = error as { message?: string };
+      showToast(err.message || 'Failed to send reset email', 'error');
     } finally {
       setLoading(false);
     }
@@ -61,9 +64,10 @@ const PartnerSignInPage: React.FC = () => {
       await signIn(email, password);
       console.log('Sign-in successful, waiting for partner data...');
       setJustSignedIn(true);
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { message?: string };
       console.error('Sign in error:', error);
-      alert(error.message || 'Sign in failed. Please try again.');
+      showToast(err.message || 'Sign in failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -83,9 +87,10 @@ const PartnerSignInPage: React.FC = () => {
         // New partner without active subscription - go to subscription plans
         navigate('/subscription-plans');
       }
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { message?: string };
       console.error('Google sign in error:', error);
-      alert(error.message || 'Sign in failed. Please try again.');
+      showToast(err.message || 'Sign in failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }

@@ -32,7 +32,7 @@ const AdminSchedulingPage: React.FC = () => {
         .filter(r => r.scheduledDate && r.scheduledTime)
         .map(r => ({
           id: r.id,
-          area: r.location,
+          area: typeof r.location === 'string' ? r.location : [r.location?.house, r.location?.street, r.location?.city, r.location?.pincode].filter(Boolean).join(', ') || 'Unknown',
           date: r.scheduledDate!,
           timeSlot: r.scheduledTime!,
           assignedPartnerId: r.partnerId,
@@ -67,7 +67,7 @@ const AdminSchedulingPage: React.FC = () => {
         .filter(r => r.scheduledDate && r.scheduledTime)
         .map(r => ({
           id: r.id,
-          area: typeof r.location === 'string' ? r.location : r.location?.city || 'Unknown',
+          area: r.location || 'Unknown',
           date: r.scheduledDate!,
           timeSlot: r.scheduledTime!,
           assignedPartnerId: r.partnerId,
@@ -81,7 +81,7 @@ const AdminSchedulingPage: React.FC = () => {
       setSchedules(scheduledRequests);
 
       // Extract unique areas from both waste requests and partner schedules
-      const wasteAreas = wasteRequestsData.map(r => typeof r.location === 'string' ? r.location : r.location?.city || 'Unknown');
+      const wasteAreas = wasteRequestsData.map(r => typeof r.location === 'string' ? r.location : [r.location?.house, r.location?.street, r.location?.city, r.location?.pincode].filter(Boolean).join(', ') || 'Unknown');
       const uniqueAreas = Array.from(new Set(wasteAreas));
       const mockAreaSchedules: AreaSchedule[] = uniqueAreas.map(area => ({
         area,
@@ -104,7 +104,6 @@ const AdminSchedulingPage: React.FC = () => {
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
     const firstDay = new Date(year, monthIndex, 1);
-    const lastDay = new Date(year, monthIndex + 1, 0);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - startDate.getDay());
     
@@ -171,27 +170,8 @@ const AdminSchedulingPage: React.FC = () => {
     }
   };
 
-  const handleUpdateSchedule = async (scheduleId: string, updates: Partial<PickupSchedule>) => {
-    try {
-      // Update the waste request status instead
-      await dbService.updateWasteRequest(scheduleId, {
-        status: updates.status === 'completed' ? 'accepted' : 'accepted'
-      });
-      if (selectedSchedule?.id === scheduleId) {
-        setSelectedSchedule({ ...selectedSchedule, ...updates });
-      }
-      await loadData(); // Refresh data
-    } catch (error) {
-      console.error('Error updating schedule:', error);
-      alert('Failed to update schedule. Please try again.');
-    }
-  };
-
   const monthDates = getMonthDates(currentMonth);
   const currentMonthIndex = currentMonth.getMonth();
-  const filteredSchedules = selectedArea === 'all'
-    ? schedules
-    : schedules.filter(s => s.area === selectedArea);
 
   if (loading) {
     return (
@@ -274,7 +254,7 @@ const AdminSchedulingPage: React.FC = () => {
             {monthDates.map((date, index) => {
               const isToday = date.toDateString() === new Date().toDateString();
               const isCurrentMonth = date.getMonth() === currentMonthIndex;
-              const daySchedules = areaSchedules.flatMap(area => 
+              const daySchedules = areaSchedules.flatMap(() => 
                 getSchedulesForDate(date, selectedArea === 'all' ? undefined : selectedArea)
               );
               
@@ -372,7 +352,7 @@ const AdminSchedulingPage: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Waste Requests ({selectedSchedule.wasteRequestIds.length})</label>
                     <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {selectedSchedule.wasteRequestIds.map(requestId => {
+                      {selectedSchedule.wasteRequestIds.map((requestId: string) => {
                         const request = wasteRequests.find(r => r.id === requestId);
                         return request ? (
                           <div key={requestId} className="flex items-center justify-between p-2 bg-gray-50 rounded">
@@ -380,7 +360,7 @@ const AdminSchedulingPage: React.FC = () => {
                               <span className="text-sm font-medium">{request.type}</span>
                               <span className="text-xs text-gray-600 ml-2">{request.quantity}</span>
                             </div>
-                            <span className="text-xs text-gray-500">{typeof request.location === 'string' ? request.location : request.location?.city || 'Unknown'}</span>
+                            <span className="text-xs text-gray-500">{typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ') || 'Unknown'}</span>
                           </div>
                         ) : null;
                       })}
@@ -431,7 +411,7 @@ const AdminSchedulingPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {areaSchedules.flatMap(area => 
+                  {areaSchedules.flatMap(() => 
                     getSchedulesForDate(selectedDate, selectedArea === 'all' ? undefined : selectedArea)
                   ).map(schedule => (
                     <div

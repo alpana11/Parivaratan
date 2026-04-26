@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
+import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import PartnerSignInPage from './pages/PartnerSignInPage';
@@ -30,62 +31,50 @@ import AdminVouchersPage from './pages/AdminVouchersPage';
 import AdminSchedulingPage from './pages/AdminSchedulingPage';
 import AdminNotificationsPage from './pages/AdminNotificationsPage';
 import AdminCommunityPage from './pages/AdminCommunityPage';
-import AdminSetupPage from './pages/AdminSetupPage';
-import UserVouchersPage from './pages/UserVouchersPage';
-import UserDashboard from './pages/UserDashboard';
-
 import VerificationStatusPage from './pages/VerificationStatusPage';
 import SubscriptionPlansPage from './pages/SubscriptionPlansPage';
 import MakePaymentPage from './pages/MakePaymentPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
-  console.log('🚀 APP ROUTES LOADED - All pathways enabled');
-  console.log('📍 Available Routes:', {
-    public: ['/', '/signin', '/signup', '/document-upload', '/verification-pending', '/verification-status', '/subscription-plans', '/make-payment', '/subscription-required', '/admin/login', '/admin/setup'],
-    partner: ['/dashboard', '/dashboard/requests', '/dashboard/location-routes', '/dashboard/history', '/dashboard/analytics', '/dashboard/notifications', '/dashboard/profile'],
-    admin: ['/admin/dashboard', '/admin/ai-insights', '/admin/waste-requests', '/admin/partners', '/admin/documents', '/admin/subscriptions', '/admin/rewards', '/admin/vouchers', '/admin/scheduling', '/admin/analytics', '/admin/notifications']
-  });
-  
   return (
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/signin" element={<PartnerSignInPage />} />
-          <Route path="/signup" element={<PartnerSignUpPage />} />
-          <Route path="/document-upload" element={<DocumentUploadPage />} />
-          <Route path="/verification-pending" element={<VerificationPendingPage />} />
-          <Route path="/verification-status" element={<VerificationStatusPage />} />
-          <Route path="/subscription-plans" element={<SubscriptionPlansPage />} />
-          <Route path="/make-payment" element={<MakePaymentPage />} />
-          <Route path="/subscription-required" element={<SubscriptionRequiredPage />} />
-          <Route path="/user/vouchers" element={<UserVouchersPage />} />
-          <Route path="/user/dashboard" element={<UserDashboard />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin/setup" element={<AdminSetupPage />} />
-          <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboard /></ProtectedRoute>}>
-            <Route path="dashboard" element={<AdminDashboardHome />} />
-            <Route path="users" element={<AdminUsersPage />} />
-            <Route path="waste-requests" element={<AdminWasteRequestsPage />} />
-            <Route path="partners" element={<AdminPartnersPage />} />
-            <Route path="documents" element={<AdminDocumentVerificationPage />} />
-            <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
-            <Route path="rewards" element={<AdminRewardsPage />} />
-            <Route path="vouchers" element={<AdminVouchersPage />} />
-            <Route path="scheduling" element={<AdminSchedulingPage />} />
-            <Route path="analytics" element={<AdminAnalyticsPage />} />
-            <Route path="notifications" element={<AdminNotificationsPage />} />
-            <Route path="community" element={<AdminCommunityPage />} />
+          <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
+          <Route path="/signin" element={<ErrorBoundary><PartnerSignInPage /></ErrorBoundary>} />
+          <Route path="/signup" element={<ErrorBoundary><PartnerSignUpPage /></ErrorBoundary>} />
+          <Route path="/document-upload" element={<ErrorBoundary><DocumentUploadPage /></ErrorBoundary>} />
+          <Route path="/verification-pending" element={<ErrorBoundary><VerificationPendingPage /></ErrorBoundary>} />
+          <Route path="/verification-status" element={<ErrorBoundary><VerificationStatusPage /></ErrorBoundary>} />
+          <Route path="/subscription-plans" element={<ErrorBoundary><SubscriptionPlansPage /></ErrorBoundary>} />
+          <Route path="/make-payment" element={<ErrorBoundary><MakePaymentPage /></ErrorBoundary>} />
+          <Route path="/subscription-required" element={<ErrorBoundary><SubscriptionRequiredPage /></ErrorBoundary>} />
+          <Route path="/admin/login" element={<ErrorBoundary><AdminLoginPage /></ErrorBoundary>} />
+          <Route path="/admin" element={<ProtectedRoute requireAdmin><ErrorBoundary><AdminDashboard /></ErrorBoundary></ProtectedRoute>}>
+            <Route path="dashboard" element={<ErrorBoundary><AdminDashboardHome /></ErrorBoundary>} />
+            <Route path="users" element={<ErrorBoundary><AdminUsersPage /></ErrorBoundary>} />
+            <Route path="waste-requests" element={<ErrorBoundary><AdminWasteRequestsPage /></ErrorBoundary>} />
+            <Route path="partners" element={<ErrorBoundary><AdminPartnersPage /></ErrorBoundary>} />
+            <Route path="documents" element={<ErrorBoundary><AdminDocumentVerificationPage /></ErrorBoundary>} />
+            <Route path="subscriptions" element={<ErrorBoundary><AdminSubscriptionsPage /></ErrorBoundary>} />
+            <Route path="rewards" element={<ErrorBoundary><AdminRewardsPage /></ErrorBoundary>} />
+            <Route path="vouchers" element={<ErrorBoundary><AdminVouchersPage /></ErrorBoundary>} />
+            <Route path="scheduling" element={<ErrorBoundary><AdminSchedulingPage /></ErrorBoundary>} />
+            <Route path="analytics" element={<ErrorBoundary><AdminAnalyticsPage /></ErrorBoundary>} />
+            <Route path="notifications" element={<ErrorBoundary><AdminNotificationsPage /></ErrorBoundary>} />
+            <Route path="community" element={<ErrorBoundary><AdminCommunityPage /></ErrorBoundary>} />
           </Route>
-          <Route path="/dashboard" element={<ProtectedRoute requirePartner><PartnerDashboard /></ProtectedRoute>}>
-            <Route index element={<DashboardHome />} />
-            <Route path="requests" element={<AssignedWasteRequestsPage />} />
-            <Route path="location-routes" element={<LocationRoutesPage />} />
-            <Route path="history" element={<PickupHistoryPage />} />
-            <Route path="analytics" element={<ImpactAnalyticsPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="profile" element={<PartnerProfilePage />} />
+          <Route path="/dashboard" element={<ProtectedRoute requirePartner><ErrorBoundary><PartnerDashboard /></ErrorBoundary></ProtectedRoute>}>
+            <Route index element={<ErrorBoundary><DashboardHome /></ErrorBoundary>} />
+            <Route path="requests" element={<ErrorBoundary><AssignedWasteRequestsPage /></ErrorBoundary>} />
+            <Route path="location-routes" element={<ErrorBoundary><LocationRoutesPage /></ErrorBoundary>} />
+            <Route path="history" element={<ErrorBoundary><PickupHistoryPage /></ErrorBoundary>} />
+            <Route path="analytics" element={<ErrorBoundary><ImpactAnalyticsPage /></ErrorBoundary>} />
+            <Route path="notifications" element={<ErrorBoundary><NotificationsPage /></ErrorBoundary>} />
+            <Route path="profile" element={<ErrorBoundary><PartnerProfilePage /></ErrorBoundary>} />
           </Route>
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Router>
     </AuthProvider>

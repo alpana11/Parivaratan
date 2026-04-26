@@ -103,7 +103,7 @@ export const cloudinaryService = {
    * Delete file from Cloudinary (requires backend for security)
    * For now, files remain in Cloudinary (free tier has 25GB)
    */
-  async deleteFile(publicId: string): Promise<void> {
+  async deleteFile(): Promise<void> {
     console.warn('Delete requires backend API with Cloudinary API secret');
     // Implement backend endpoint if needed
   }

@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import { WasteRequest, Partner } from '../types';
+import { WasteRequest, Partner, ScheduledPickup } from '../types';
 import { useAdminWasteRequests } from '../hooks/useData';
-import { emailService } from '../services/emailService';
 
 const AdminWasteRequestsPage: React.FC = () => {
   const { requests, loading } = useAdminWasteRequests();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
-  const [scheduledPickups, setScheduledPickups] = useState<any[]>([]);
+  const [scheduledPickups, setScheduledPickups] = useState<ScheduledPickup[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'location'>('date');
@@ -36,34 +35,6 @@ const AdminWasteRequestsPage: React.FC = () => {
     }
   };
 
-  const handleStatusUpdate = async (requestId: string, newStatus: WasteRequest['status']) => {
-    try {
-      await dbService.updateWasteRequest(requestId, { status: newStatus });
-      
-      // Store waste request update in database
-      await dbService.storeWasteRequest({
-        id: requestId,
-        status: newStatus,
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'admin'
-      });
-      
-      // Create audit log
-      await dbService.createAuditLog({
-        adminId: 'admin',
-        actionType: 'update',
-        entityType: 'waste_request',
-        entityId: requestId,
-        details: `Status updated to ${newStatus}`,
-        metadata: { newStatus }
-      });
-      
-      // No need to manually update state - real-time listener will handle it
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
-  };
-
 
 
   const getStatusColor = (status: WasteRequest['status']) => {
@@ -73,10 +44,6 @@ const AdminWasteRequestsPage: React.FC = () => {
       case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-  };
-
-  const getPhoneNumberDisplay = (phoneNumber?: string) => {
-    return phoneNumber || 'N/A';
   };
 
   const getPartnerName = (partnerId?: string) => {
@@ -98,7 +65,7 @@ const AdminWasteRequestsPage: React.FC = () => {
         quantity: pickup.quantity || originalRequest?.quantity || 'N/A',
         location: pickup.location || originalRequest?.location || 'N/A',
         date: pickup.date || pickup.createdAt,
-        image: originalRequest?.image || originalRequest?.imageUrl || (originalRequest as any)?.wasteImage || pickup.image || pickup.wasteImage || pickup.imageUrl,
+        image: originalRequest?.image || (originalRequest as any)?.wasteImage || pickup.image || pickup.wasteImage || pickup.imageUrl,
         phoneNumber: originalRequest?.phoneNumber || (originalRequest as any)?.userPhone || pickup.phoneNumber || pickup.userPhone,
         partnerId: pickup.partnerId || originalRequest?.partnerId,
       };
@@ -222,7 +189,7 @@ const AdminWasteRequestsPage: React.FC = () => {
           </div>
           <div className="bg-white p-4 rounded-lg shadow text-center">
             <div className="text-2xl font-bold text-orange-600">
-              {requests.filter(r => r.status === 'In Progress' || r.status === 'Scheduled').length + scheduledPickups.length}
+              {requests.filter(r => r.status === 'accepted').length + scheduledPickups.length}
             </div>
             <div className="text-sm text-gray-600">In Progress</div>
           </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { dbService } from '../services/dbService';
 import { Voucher, Partner, RewardTransaction } from '../types';
+import { useToast } from '../components/Toast';
 
 const AdminVouchersPage: React.FC = () => {
+  const { showToast } = useToast();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [transactions, setTransactions] = useState<RewardTransaction[]>([]);
@@ -20,8 +22,6 @@ const AdminVouchersPage: React.FC = () => {
     category: '',
     maxRedemptions: 0
   });
-
-  const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubscribeVouchers = dbService.listenToVouchers((vouchersData) => {
@@ -46,14 +46,14 @@ const AdminVouchersPage: React.FC = () => {
 
   const handleCreateVoucher = async () => {
     if (!newVoucher.title || !newVoucher.pointsRequired) {
-      alert('Please fill in all required fields');
+      showToast('Please fill in all required fields', 'warning');
       return;
     }
 
     const expiryDate = new Date();
     expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-    const voucherData: any = {
+    const voucher: Omit<Voucher, 'id'> = {
       title: newVoucher.title,
       description: newVoucher.description,
       pointsRequired: newVoucher.pointsRequired,
@@ -62,15 +62,9 @@ const AdminVouchersPage: React.FC = () => {
       status: 'available',
       expiryDate: expiryDate.toISOString(),
       createdAt: new Date().toISOString(),
-      currentRedemptions: 0
+      currentRedemptions: 0,
+      ...(newVoucher.maxRedemptions > 0 && { maxRedemptions: newVoucher.maxRedemptions })
     };
-
-    // Only include maxRedemptions if it's provided and greater than 0
-    if (newVoucher.maxRedemptions && newVoucher.maxRedemptions > 0) {
-      voucherData.maxRedemptions = newVoucher.maxRedemptions;
-    }
-
-    const voucher: Omit<Voucher, 'id'> = voucherData;
 
     try {
       await dbService.createVoucher(voucher);
@@ -84,7 +78,7 @@ const AdminVouchersPage: React.FC = () => {
       });
     } catch (error) {
       console.error('Error creating voucher:', error);
-      alert('Failed to create voucher. Please try again.');
+      showToast('Failed to create voucher', 'error');
     }
   };
 
@@ -98,7 +92,7 @@ const AdminVouchersPage: React.FC = () => {
       await dbService.updateVoucher(voucherId, { status: newStatus });
     } catch (error) {
       console.error('Error updating voucher status:', error);
-      alert('Failed to update voucher status. Please try again.');
+      showToast('Failed to update voucher status', 'error');
     }
   };
 
@@ -112,14 +106,6 @@ const AdminVouchersPage: React.FC = () => {
 
     return { total, available, redeemed, expired, inactive };
   }, [vouchers]);
-
-  const budget = useMemo(() => {
-    const activePartners = partners.filter(p => p.subscription?.status === 'active');
-    const monthlyRevenue = activePartners.reduce((sum, p) => sum + (p.subscription?.amount || 0), 0);
-    const voucherBudget = Math.floor(monthlyRevenue * 0.1);
-
-    return { monthlyRevenue, voucherBudget };
-  }, [partners]);
 
   const filteredVouchers = useMemo(() => {
     const now = new Date();

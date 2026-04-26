@@ -4,10 +4,12 @@ import { useWasteRequests } from '../hooks/useData';
 import { dbService } from '../services/dbService';
 import { notificationScheduler } from '../services/notificationScheduler';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../components/Toast';
 
 const AssignedWasteRequestsPage: React.FC = () => {
-  const { requests, loading: _loading, refreshRequests, streamActive, updateCount } = useWasteRequests();
+  const { requests, loading: _loading, updateCount } = useWasteRequests();
   const { user, partner } = useAuth();
+  const { showToast } = useToast();
   const [selectedRequest, setSelectedRequest] = useState<WasteRequest | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -44,7 +46,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
     try {
       const request = requests.find(r => r.id === requestToSchedule);
       if (!request) {
-        alert('Request not found');
+        showToast('Request not found', 'error');
         return;
       }
 
@@ -73,8 +75,8 @@ const AssignedWasteRequestsPage: React.FC = () => {
         imageUrl: (request as any).imageUrl || request.image,
         userName: (request as any).userName || 'User',
         phoneNumber: request.phoneNumber || (request as any).userPhone || 'N/A',
-        location: typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', '),
-        area: typeof request.location === 'string' ? request.location : request.location?.city || 'Unknown',
+        location: typeof request.location === 'string' ? request.location : request.location || 'Unknown',
+        area: typeof request.location === 'string' ? request.location : request.location || 'Unknown',
         date: scheduleData.date,
         time: scheduleData.time,
         scheduledDate: scheduleData.date,
@@ -87,20 +89,24 @@ const AssignedWasteRequestsPage: React.FC = () => {
       if (userId) {
         await dbService.createNotification({
           type: 'waste_request',
+          title: 'Pickup Scheduled',
           message: `Your waste pickup has been scheduled for ${new Date(scheduleData.date).toLocaleDateString()} at ${scheduleData.time} by ${partner?.name || 'partner'}`,
           userId: userId,
-          status: 'pending'
+          status: 'pending',
+          category: 'pickup_assignment',
+          priority: 'medium',
+          createdAt: new Date().toISOString()
         });
         console.log('✅ Notification created for user:', userId);
       } else {
         console.warn('⚠️ No userId found in request:', request);
       }
 
-      alert('Pickup scheduled successfully!');
+      showToast('Pickup scheduled successfully!', 'success');
     } catch (error) {
       console.error('Error scheduling pickup:', error);
       setLocalRequests(requests);
-      alert('Failed to schedule pickup');
+      showToast('Failed to schedule pickup', 'error');
     } finally {
       setUpdating(false);
     }
@@ -111,16 +117,16 @@ const AssignedWasteRequestsPage: React.FC = () => {
 
     try {
       const request = localRequests.find(r => r.id === requestId);
-      if (!request) { alert('Request not found'); return; }
+      if (!request) { showToast('Request not found', 'error'); return; }
 
       const userId = (request as any).userId || (request as any).userID || (request as any).user_id;
       const userPhone = request.phoneNumber || (request as any).userPhone || 'N/A';
 
-      if (!userId) { alert('User information not found'); return; }
+      if (!userId) { showToast('User information not found', 'error'); return; }
 
       // Optimistically hide the button immediately
       setLocalRequests(prev => prev.map(r =>
-        r.id === requestId ? { ...r, confirmationSentAt: new Date().toISOString(), confirmationStatus: 'pending' } as any : r
+        r.id === requestId ? { ...r, confirmationSentAt: new Date().toISOString(), confirmationStatus: 'pending' as const } : r
       ));
 
       await dbService.sendAvailabilityConfirmation(
@@ -128,16 +134,15 @@ const AssignedWasteRequestsPage: React.FC = () => {
       );
 
       await dbService.updateWasteRequest(requestId, {
-        confirmationStatus: 'pending',
+        confirmationStatus: 'pending' as const,
         confirmationSentAt: new Date().toISOString()
-      } as any);
+      });
 
-      alert('✅ Availability question sent to user!');
+      showToast('Availability question sent to user!', 'success');
     } catch (error) {
       console.error('Error sending availability question:', error);
-      // Revert optimistic update on failure
       setLocalRequests(requests);
-      alert('Failed to send question to user');
+      showToast('Failed to send question to user', 'error');
     }
   };
 
@@ -175,23 +180,6 @@ const AssignedWasteRequestsPage: React.FC = () => {
     setShowStatusModal(true);
   };
 
-  const handleStatusChange = async (newStatus: WasteRequest['status']) => {
-    if (!requestToUpdate) return;
-
-    setUpdating(true);
-    try {
-      await dbService.updateWasteRequest(requestToUpdate, { status: newStatus });
-      // No need to manually refresh - real-time listener will handle it
-      setShowStatusModal(false);
-      setRequestToUpdate(null);
-    } catch (error) {
-      console.error('Error updating request status:', error);
-      alert('Failed to update request status');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const handleAction = async (id: string, action: 'accept' | 'reject' | 'reschedule' | 'update') => {
     setUpdating(true);
     try {
@@ -208,7 +196,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
           notificationMessage = `Your waste request has been rejected by ${partner?.name || 'partner'}`;
           break;
         case 'reschedule':
-          alert('Reschedule functionality would open a modal here');
+          showToast('Reschedule functionality would open a modal here', 'info');
           setUpdating(false);
           return;
         default:
@@ -224,17 +212,21 @@ const AssignedWasteRequestsPage: React.FC = () => {
       if (request && (request as any).userId) {
         await dbService.createNotification({
           type: 'waste_request',
+          title: action === 'accept' ? 'Request Accepted' : 'Request Rejected',
           message: notificationMessage,
           userId: (request as any).userId,
-          status: 'pending'
+          status: 'pending',
+          category: 'pickup_assignment',
+          priority: 'medium',
+          createdAt: new Date().toISOString()
         });
       }
       
-      alert(`Request ${action === 'accept' ? 'accepted' : 'rejected'} successfully!`);
+      showToast(`Request ${action === 'accept' ? 'accepted' : 'rejected'} successfully!`, 'success');
     } catch (error) {
       console.error('Error updating request:', error);
       setLocalRequests(requests);
-      alert('Failed to update request');
+      showToast('Failed to update request', 'error');
     } finally {
       setUpdating(false);
     }
@@ -348,7 +340,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
                           <span className="text-sm ml-2">
                             {typeof request.location === 'string' 
                               ? request.location 
-                              : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ')
+                              : [(request.location as any)?.house, (request.location as any)?.street, (request.location as any)?.city, (request.location as any)?.pincode].filter(Boolean).join(', ')
                             }
                           </span>
                         </div>
@@ -494,7 +486,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mt-2">
                         <div><span className="font-medium">Quantity:</span> {request.quantity}</div>
-                        <div><span className="font-medium">Location:</span> {typeof request.location === 'string' ? request.location : [request.location?.house, request.location?.street, request.location?.city, request.location?.pincode].filter(Boolean).join(', ')}</div>
+                        <div><span className="font-medium">Location:</span> {typeof request.location === 'string' ? request.location : [(request.location as any)?.house, (request.location as any)?.street, (request.location as any)?.city, (request.location as any)?.pincode].filter(Boolean).join(', ')}</div>
                       </div>
                       <div className="text-xs text-gray-500 mt-2">
                         Rejected on {new Date(request.createdAt).toLocaleDateString()}
@@ -544,7 +536,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h5 className="font-semibold text-gray-900 mb-2">Location</h5>
-                    <p className="text-gray-700">{typeof selectedRequest.location === 'string' ? selectedRequest.location : [selectedRequest.location?.house, selectedRequest.location?.street, selectedRequest.location?.city, selectedRequest.location?.pincode].filter(Boolean).join(', ')}</p>
+                    <p className="text-gray-700">{typeof selectedRequest.location === 'string' ? selectedRequest.location : [(selectedRequest.location as any)?.house, (selectedRequest.location as any)?.street, (selectedRequest.location as any)?.city, (selectedRequest.location as any)?.pincode].filter(Boolean).join(', ')}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h5 className="font-semibold text-gray-900 mb-2">Phone Number</h5>
@@ -580,7 +572,7 @@ const AssignedWasteRequestsPage: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h5 className="font-semibold text-gray-900 mb-2">Description</h5>
                   <p className="text-gray-700">
-                    {selectedRequest.type} waste collection request at {typeof selectedRequest.location === 'string' ? selectedRequest.location : [selectedRequest.location?.house, selectedRequest.location?.street, selectedRequest.location?.city, selectedRequest.location?.pincode].filter(Boolean).join(', ')}.
+                    {selectedRequest.type} waste collection request at {typeof selectedRequest.location === 'string' ? selectedRequest.location : [(selectedRequest.location as any)?.house, (selectedRequest.location as any)?.street, (selectedRequest.location as any)?.city, (selectedRequest.location as any)?.pincode].filter(Boolean).join(', ')}.
                     Contact: {selectedRequest.phoneNumber || 'N/A'}.
                     Quantity: {selectedRequest.quantity}.
                   </p>
@@ -676,15 +668,19 @@ const AssignedWasteRequestsPage: React.FC = () => {
                           type: 'waste_request',
                           message: `Your waste request has been completed by ${partner?.name || 'partner'}. Thank you!`,
                           userId: (request as any).userId,
-                          status: 'pending'
+                          status: 'pending',
+                          title: 'Waste Request Completed',
+                          category: 'pickup_assignment',
+                          priority: 'medium',
+                          createdAt: new Date().toISOString()
                         });
                       }
                       
-                      alert('✅ Request marked as completed!');
+                      showToast('Request marked as completed!', 'success');
                     } catch (error) {
                       console.error('❌ Error marking as completed:', error);
                       setLocalRequests(requests);
-                      alert('Failed to update status');
+                      showToast('Failed to update status', 'error');
                     }
                   }}
                   className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-all duration-200 flex items-center justify-between"
@@ -743,7 +739,7 @@ const ScheduleForm: React.FC<{ onSubmit: (data: { method: 'pickup' | 'dropoff'; 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!date || !time) {
-      alert('Please select date and time');
+      // handled by required fields
       return;
     }
     onSubmit({ method: 'pickup', date, time });

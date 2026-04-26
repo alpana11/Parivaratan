@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
 import { dbService } from '../services/dbService';
 import { useAuth } from '../hooks/useAuth';
+import { ScheduledPickup } from '../types';
 
 const PickupHistoryPage: React.FC = () => {
   const { requests, streamActive, updateCount } = useWasteRequests();
   const { metrics } = useImpactMetrics();
   const { user } = useAuth();
-  const [scheduledFromDB, setScheduledFromDB] = useState<any[]>([]);
+  const [scheduledFromDB, setScheduledFromDB] = useState<ScheduledPickup[]>([]);
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
 
   useEffect(() => {
@@ -214,7 +215,7 @@ const PickupHistoryPage: React.FC = () => {
             ) : (
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
                 {completedPickups.map((pickup) => {
-                  const imageUrl = pickup.imageUrl || pickup.image || '';
+                  const imageUrl = pickup.image || '';
                   return (
                     <div key={pickup.id} className="border rounded-lg p-4 bg-blue-50">
                       <div className="flex items-start space-x-4">
@@ -249,7 +250,7 @@ const PickupHistoryPage: React.FC = () => {
                               <span className="font-medium">Location:</span> {typeof pickup.location === 'string' ? pickup.location : [pickup.location?.house, pickup.location?.street, pickup.location?.city, pickup.location?.pincode].filter(Boolean).join(', ')}
                             </div>
                             <div>
-                              <span className="font-medium">Phone:</span> {pickup.userPhone || pickup.phoneNumber || 'N/A'}
+                              <span className="font-medium">Phone:</span> {pickup.phoneNumber || 'N/A'}
                             </div>
                             <div>
                               <span className="font-medium">Date:</span> {new Date(pickup.date).toLocaleDateString()}

@@ -2,28 +2,74 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
+const SECRET_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY || 'PARIVARTAN@ADMIN2025';
+
 const AdminLoginPage: React.FC = () => {
+  const [unlocked, setUnlocked] = useState(false);
+  const [secretInput, setSecretInput] = useState('');
+  const [secretError, setSecretError] = useState('');
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { adminSignIn } = useAuth();
 
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (secretInput === SECRET_KEY) {
+      setUnlocked(true);
+      setSecretError('');
+    } else {
+      setSecretError('Invalid secret key. Access denied.');
+      setSecretInput('');
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      // Use actual Firebase admin authentication
       await adminSignIn(credentials.email, credentials.password);
       navigate('/admin/dashboard');
-    } catch (error: any) {
-      setError(error.message || 'Invalid credentials');
+    } catch (err) {
+      const e = err as { message?: string };
+      setError(e.message || 'Invalid credentials');
     } finally {
       setLoading(false);
     }
   };
+
+  if (!unlocked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <span className="text-5xl">🔒</span>
+            <h2 className="mt-4 text-3xl font-extrabold text-white">Restricted Access</h2>
+            <p className="mt-2 text-sm text-gray-400">Enter the secret key to continue</p>
+          </div>
+          <form onSubmit={handleUnlock} className="bg-white/10 backdrop-blur-sm p-8 rounded-2xl space-y-4">
+            <input
+              type="password"
+              placeholder="Enter secret key"
+              value={secretInput}
+              onChange={(e) => setSecretInput(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-600 rounded-xl bg-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            {secretError && <p className="text-red-400 text-sm">{secretError}</p>}
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl text-white font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-colors"
+            >
+              Unlock
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -47,7 +93,7 @@ const AdminLoginPage: React.FC = () => {
               value={credentials.email}
               onChange={(e) => setCredentials({...credentials, email: e.target.value})}
               className="w-full px-4 py-3 border border-gray-600 rounded-xl bg-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="admin@parivartan.com"
+              placeholder="Enter admin email"
             />
           </div>
           <div>
@@ -72,9 +118,6 @@ const AdminLoginPage: React.FC = () => {
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
-          <div className="text-center text-xs text-gray-400">
-            Demo: admin@parivartan.com / admin123
-          </div>
         </form>
       </div>
     </div>

@@ -4,10 +4,13 @@ import { dbService } from '../services/dbService';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useWasteRequests } from '../hooks/useData';
+import { useToast } from '../components/Toast';
+import { PartnerDocument } from '../types';
 
 const PartnerProfilePage: React.FC = () => {
   const { partner, user, loading, signOut } = useAuth();
   const { streamActive, updateCount } = useWasteRequests();
+  const { showToast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
     id: '',
@@ -19,12 +22,11 @@ const PartnerProfilePage: React.FC = () => {
     address: '',
     supportedWasteTypes: [] as string[],
     verificationStatus: 'pending' as 'pending' | 'approved' | 'rejected',
-    documents: [] as any[],
+    documents: [] as PartnerDocument[],
     rewardPoints: 0,
   });
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Auto-load partner data from Firestore when user is authenticated
@@ -102,7 +104,6 @@ const PartnerProfilePage: React.FC = () => {
   const handleSave = async () => {
     if (!user) return;
 
-    setSaving(true);
     try {
       await dbService.updatePartner(user.uid, {
         name: profile.name,
@@ -114,12 +115,10 @@ const PartnerProfilePage: React.FC = () => {
         supportedWasteTypes: profile.supportedWasteTypes,
       });
       setIsEditing(false);
-      alert('Profile updated successfully!');
+      showToast('Profile updated successfully!', 'success');
     } catch (error) {
       console.error('Error updating profile:', error);
-      alert('Failed to update profile');
-    } finally {
-      setSaving(false);
+      showToast('Failed to update profile', 'error');
     }
   };
 
@@ -137,7 +136,7 @@ const PartnerProfilePage: React.FC = () => {
       window.location.href = '/';
     } catch (error) {
       console.error('Error logging out:', error);
-      alert('Failed to logout');
+      showToast('Failed to logout', 'error');
     }
   };
 

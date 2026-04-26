@@ -4,8 +4,10 @@ import { collection, addDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
+import { useToast } from '../components/Toast';
 
 const LandingPage: React.FC = () => {
+  const { showToast } = useToast();
   const [showLearnMore, setShowLearnMore] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +50,7 @@ const LandingPage: React.FC = () => {
       setTimeout(() => setSubmitSuccess(false), 3000);
     } catch (error) {
       console.error('Error submitting message:', error);
-      alert('Failed to send message: ' + (error as Error).message);
+      showToast('Failed to send message. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -75,10 +77,7 @@ const LandingPage: React.FC = () => {
                 Partner Sign-Up
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
-              <Link to="/admin/setup" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
-                Admin Setup
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
-              </Link>
+
             </nav>
           </div>
         </div>
@@ -280,58 +279,20 @@ const LandingPage: React.FC = () => {
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
-              <img
-                src="https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?w=300&h=200&fit=crop"
-                alt="Plastic Bottles"
-                className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h4 className="font-semibold">Plastic Bottles</h4>
-                  <p className="text-sm">Recyclable</p>
+            {[
+              { emoji: '🧴', label: 'Plastic Bottles', tag: 'Recyclable', from: 'from-blue-100', to: 'to-blue-200', text: 'text-blue-600' },
+              { emoji: '📄', label: 'Paper Waste', tag: 'Biodegradable', from: 'from-yellow-100', to: 'to-yellow-200', text: 'text-yellow-700' },
+              { emoji: '💻', label: 'Electronic Waste', tag: 'Hazardous', from: 'from-red-100', to: 'to-red-200', text: 'text-red-600' },
+              { emoji: '👕', label: 'Clothes', tag: 'Donateable', from: 'from-purple-100', to: 'to-purple-200', text: 'text-purple-600' },
+            ].map((item) => (
+              <div key={item.label} className={`group bg-gradient-to-br ${item.from} ${item.to} rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 h-48 flex flex-col items-center justify-center gap-3`}>
+                <span className="text-6xl group-hover:scale-110 transition-transform duration-300">{item.emoji}</span>
+                <div className="text-center">
+                  <h4 className={`font-semibold ${item.text}`}>{item.label}</h4>
+                  <p className="text-sm text-gray-500">{item.tag}</p>
                 </div>
               </div>
-            </div>
-            <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
-              <img
-                src="https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=300&h=200&fit=crop"
-                alt="Paper Waste"
-                className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h4 className="font-semibold">Paper Waste</h4>
-                  <p className="text-sm">Biodegradable</p>
-                </div>
-              </div>
-            </div>
-            <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
-              <img
-                src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop"
-                alt="Electronic Waste"
-                className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h4 className="font-semibold">Electronic Waste</h4>
-                  <p className="text-sm">Hazardous</p>
-                </div>
-              </div>
-            </div>
-            <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
-              <img
-                src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=300&h=200&fit=crop"
-                alt="Organic Waste"
-                className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h4 className="font-semibold">Organic Waste</h4>
-                  <p className="text-sm">Compostable</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -400,6 +361,7 @@ const LandingPage: React.FC = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                     required
+                    aria-label="Your Name"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   />
                 </div>
@@ -410,6 +372,7 @@ const LandingPage: React.FC = () => {
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
                     required
+                    aria-label="Your Email"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   />
                 </div>
@@ -420,6 +383,7 @@ const LandingPage: React.FC = () => {
                     value={formData.message}
                     onChange={(e) => setFormData({...formData, message: e.target.value})}
                     required
+                    aria-label="Your Message"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
                   ></textarea>
                 </div>
@@ -641,6 +605,7 @@ const LandingPage: React.FC = () => {
             <p className="text-gray-400">Transforming waste management for a sustainable future</p>
           </div>
           <p className="text-gray-400">&copy; 2025 Parivartan.</p>
+          <Link to="/admin/login" className="text-gray-600 hover:text-gray-400 text-xs mt-2 inline-block transition-colors">Admin</Link>
         </div>
       </footer>
     </div>

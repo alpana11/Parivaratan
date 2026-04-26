@@ -15,7 +15,6 @@ const AdminPartnersPage: React.FC = () => {
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [showPerformanceModal, setShowPerformanceModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [updatedPartners, setUpdatedPartners] = useState<Set<string>>(new Set());
   const [wasteRequests, setWasteRequests] = useState<any[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -59,18 +58,6 @@ const AdminPartnersPage: React.FC = () => {
     }
   };
 
-  const handleStatusUpdateRequest = (partnerId: string, newStatus: string) => {
-    const partner = partners.find(p => p.id === partnerId);
-    if (!partner) return;
-
-    setConfirmDialog({
-      isOpen: true,
-      partnerId,
-      newStatus,
-      partnerName: partner.name
-    });
-  };
-
   const handleStatusUpdate = async () => {
     const { partnerId, newStatus } = confirmDialog;
     setConfirmDialog({ isOpen: false, partnerId: '', newStatus: '', partnerName: '' });
@@ -84,7 +71,6 @@ const AdminPartnersPage: React.FC = () => {
       setPartners(partners.map(p =>
         p.id === partnerId ? { ...p, verificationStatus: newStatus as Partner['verificationStatus'] } : p
       ));
-      setUpdatedPartners(prev => new Set(prev).add(partnerId));
       
       // Create audit log
       await dbService.createAuditLog({

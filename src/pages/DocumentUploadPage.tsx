@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { cloudinaryService } from '../services/cloudinaryService';
 import { emailService } from '../services/emailService';
+import Spinner from '../components/Spinner';
 
 const DocumentUploadPage: React.FC = () => {
   const { user, partner, refreshPartner } = useAuth();
@@ -111,7 +112,7 @@ const DocumentUploadPage: React.FC = () => {
       // Update Firestore - ensure no undefined values
       const partnerRef = doc(db, 'partners', user.uid);
       const cleanDocuments = updatedDocuments.map(doc => {
-        const cleanDoc: any = {
+      const cleanDoc: PartnerDocument = {
           type: doc.type,
           url: doc.url,
           uploadedAt: doc.uploadedAt,
@@ -134,9 +135,10 @@ const DocumentUploadPage: React.FC = () => {
       await refreshPartner();
 
       setUploading(prev => ({ ...prev, [documentType]: false }));
-    } catch (error: any) {
-      console.error('❌ Upload error:', error);
-      setErrors(prev => ({ ...prev, [documentType]: error.message || 'Failed to upload document.' }));
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Upload error:', err);
+      setErrors(prev => ({ ...prev, [documentType]: err.message || 'Failed to upload document.' }));
       setUploading(prev => ({ ...prev, [documentType]: false }));
     }
   };
@@ -144,11 +146,6 @@ const DocumentUploadPage: React.FC = () => {
   const getDocumentStatus = (type: DocumentType) => {
     const doc = documents.find(d => d.type === type);
     return doc ? doc.verified : 'not_uploaded';
-  };
-
-  const getDocumentUrl = (type: DocumentType) => {
-    const doc = documents.find(d => d.type === type);
-    return doc?.url;
   };
 
   const isAllDocumentsUploaded = () => {
@@ -184,14 +181,7 @@ const DocumentUploadPage: React.FC = () => {
   };
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <Spinner message="Loading..." />;
   }
 
   return (

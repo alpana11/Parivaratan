@@ -4,12 +4,11 @@ import { WasteRequest, ImpactMetrics, Voucher, RewardTransaction } from '../type
 import { useAuth } from './useAuth';
 
 // Prevent circular dependency
-let cachedRequests: WasteRequest[] = [];
 
 export const useWasteRequests = () => {
   const [requests, setRequests] = useState<WasteRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [updateCount, setUpdateCount] = useState(0);
   const { user } = useAuth();
 
@@ -21,7 +20,6 @@ export const useWasteRequests = () => {
     }
 
     setLoading(true);
-    setError(null);
 
     const unsubscribe = dbService.subscribeToWasteRequestsForPartner(user.uid, (data) => {
       setRequests(data);
@@ -45,7 +43,7 @@ export const useWasteRequests = () => {
       const data = await dbService.getWasteRequests(user.uid);
       setRequests(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh waste requests');
+      console.error('Failed to refresh waste requests:', err);
     }
   };
 
@@ -55,7 +53,7 @@ export const useWasteRequests = () => {
 export const useImpactMetrics = () => {
   const [metrics, setMetrics] = useState<ImpactMetrics>({ wasteProcessed: 0, co2Reduction: 0 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const { user } = useAuth();
   const { requests } = useWasteRequests();
 
@@ -87,7 +85,7 @@ export const useImpactMetrics = () => {
 export const useVouchers = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchVouchers = async () => {
@@ -95,9 +93,8 @@ export const useVouchers = () => {
         setLoading(true);
         const data = await dbService.getVouchers();
         setVouchers(data);
-        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch vouchers');
+        console.error('Failed to fetch vouchers:', err);
       } finally {
         setLoading(false);
       }
@@ -112,7 +109,7 @@ export const useVouchers = () => {
 export const useRewardTransactions = () => {
   const [transactions, setTransactions] = useState<RewardTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -127,9 +124,8 @@ export const useRewardTransactions = () => {
         setLoading(true);
         const data = await dbService.getRewardTransactions(user.uid);
         setTransactions(data);
-        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch reward transactions');
+        console.error('Failed to fetch reward transactions:', err);
       } finally {
         setLoading(false);
       }
@@ -144,12 +140,11 @@ export const useRewardTransactions = () => {
 export const useAdminWasteRequests = () => {
   const [requests, setRequests] = useState<WasteRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
-    setError(null);
 
     const unsubscribe = dbService.subscribeToWasteRequests((data) => {
       setRequests(data);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { dbService } from '../services/dbService';
 import AOS from 'aos';
@@ -23,7 +23,6 @@ const AdminDashboardHome: React.FC = () => {
   });
 
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [wasteRequests, setWasteRequests] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -57,7 +56,6 @@ const AdminDashboardHome: React.FC = () => {
   useEffect(() => {
     if (wasteRequests.length > 0 || partners.length > 0 || vouchers.length > 0 || scheduledPickups.length > 0) {
       updateDashboardData(wasteRequests, partners, vouchers, scheduledPickups);
-      setIsLoading(false);
     }
   }, [wasteRequests, partners, vouchers, scheduledPickups]);
 
@@ -224,10 +222,6 @@ const AdminDashboardHome: React.FC = () => {
   };
 
   useEffect(() => { AOS.init({ duration: 600, once: true }); }, []);
-
-  const loadDashboardData = async () => {
-    setIsLoading(true);
-  };
 
   return (
     <div className="max-w-7xl mx-auto">

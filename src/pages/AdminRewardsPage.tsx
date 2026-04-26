@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { Partner, RewardRule, RewardTransaction } from '../types';
+import { useToast } from '../components/Toast';
 
 const AdminRewardsPage: React.FC = () => {
+  const { showToast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [rewardRules, setRewardRules] = useState<RewardRule[]>([]);
   const [rewardTransactions, setRewardTransactions] = useState<RewardTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'rules' | 'summary'>('summary');
   const [showRuleModal, setShowRuleModal] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<RewardRule | null>(null);
   const [newRule, setNewRule] = useState<Partial<RewardRule>>({
     wasteType: '',
     pointsPerKg: 0,
@@ -83,7 +84,7 @@ const AdminRewardsPage: React.FC = () => {
       setShowRuleModal(false);
     } catch (error) {
       console.error('Error creating reward rule:', error);
-      alert('Failed to create reward rule');
+      showToast('Failed to create reward rule', 'error');
     }
   };
 
@@ -300,7 +301,7 @@ const AdminRewardsPage: React.FC = () => {
 
 
 
-        {activeTab === 'partners' && (
+        {activeTab === 'summary' && (
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Partner Rewards Summary</h3>

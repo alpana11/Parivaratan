@@ -3,9 +3,11 @@ import { dbService } from '../services/dbService';
 import { Partner, SubscriptionPlan, PartnerSubscription, SubscriptionStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { emailService } from '../services/emailService';
+import { useToast } from '../components/Toast';
 
 const AdminSubscriptionsPage: React.FC = () => {
   const { admin } = useAuth();
+  const { showToast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([
     {
@@ -188,14 +190,14 @@ const AdminSubscriptionsPage: React.FC = () => {
       setShowPlanModal(false);
     } catch (error) {
       console.error('Error creating plan:', error);
-      alert('Failed to create plan');
+      showToast('Failed to create plan', 'error');
     }
   };
 
   const handleActivateSubscription = async (partner: Partner, plan: SubscriptionPlan) => {
     // Only allow activation if partner is verified
-    if (partner.status !== 'verified' && partner.status !== 'active' && partner.verificationStatus !== 'approved') {
-      alert('Partner must be verified before subscription activation');
+    if (partner.verificationStatus !== 'approved' && partner.subscriptionStatus !== 'active') {
+      showToast('Partner must be verified before subscription activation', 'warning');
       return;
     }
 
@@ -219,12 +221,12 @@ const AdminSubscriptionsPage: React.FC = () => {
     try {
       await dbService.updatePartner(partner.id, {
         subscription,
-        status: 'active' // Also update partner status to active
+        subscriptionStatus: 'active' // Also update partner status to active
       });
 
       setPartners(partners.map(p =>
         p.id === partner.id
-          ? { ...p, subscription, status: 'active' }
+          ? { ...p, subscription, subscriptionStatus: 'active' }
           : p
       ));
 
@@ -263,45 +265,6 @@ const AdminSubscriptionsPage: React.FC = () => {
       setSelectedPlan(null);
     } catch (error) {
       console.error('Error activating subscription:', error);
-    }
-  };
-
-  const handleDeactivateSubscription = async (partnerId: string) => {
-    // This function is kept for manual override if needed in future
-    // Currently not exposed in UI
-    try {
-      const partner = partners.find(p => p.id === partnerId);
-      if (!partner?.subscription) return;
-
-      const previousSubscription = { ...partner.subscription };
-      const updatedSubscription = {
-        ...partner.subscription,
-        status: 'expired' as SubscriptionStatus
-      };
-
-      await dbService.updatePartner(partnerId, {
-        subscription: updatedSubscription
-      });
-
-      // Create audit log
-      await dbService.createAuditLog({
-        adminId: admin?.id || 'unknown',
-        adminName: admin?.name || 'Admin User',
-        action: 'Subscription Manually Deactivated',
-        actionType: 'update',
-        details: `Manually deactivated subscription for ${partner.name}`,
-        timestamp: new Date().toISOString(),
-        entityType: 'subscription',
-        entityId: partnerId,
-        previousValue: { subscription: previousSubscription },
-        newValue: { subscription: updatedSubscription },
-        metadata: {
-          partnerId,
-          partnerName: partner.name
-        }
-      });
-    } catch (error) {
-      console.error('Error deactivating subscription:', error);
     }
   };
 
@@ -471,7 +434,7 @@ const AdminSubscriptionsPage: React.FC = () => {
           {filteredPartners.map((partner) => {
             const subscription = partner.subscription;
             const plan = subscription ? subscriptionPlans.find(p => p.id === subscription.planId) : null;
-            const isVerified = partner.status === 'verified' || partner.status === 'active' || partner.verificationStatus === 'approved';
+            const isVerified = partner.verificationStatus === 'approved' || partner.subscriptionStatus === 'active';
 
             return (
               <div key={partner.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">

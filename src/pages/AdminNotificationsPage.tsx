@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { Partner, Notification, WasteRequest } from '../types';
+import { useToast } from '../components/Toast';
 
 const AdminNotificationsPage: React.FC = () => {
+  const { showToast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [wasteRequests, setWasteRequests] = useState<WasteRequest[]>([]);
@@ -91,7 +93,7 @@ const AdminNotificationsPage: React.FC = () => {
 
   const handleCreateNotification = async () => {
     if (!newNotification.title || !newNotification.message) {
-      alert('Please fill in title and message');
+      showToast('Please fill in title and message', 'warning');
       return;
     }
 
@@ -104,6 +106,9 @@ const AdminNotificationsPage: React.FC = () => {
           message: newNotification.message,
           type: newNotification.type,
           status: 'pending' as const,
+          createdAt: new Date().toISOString(),
+          priority: 'medium' as const,
+          category: 'general' as const,
         }));
         await dbService.createBulkNotifications(notifications);
       } else if (newNotification.recipientType === 'all-users') {
@@ -114,12 +119,15 @@ const AdminNotificationsPage: React.FC = () => {
           message: newNotification.message,
           type: newNotification.type,
           status: 'pending' as const,
+          createdAt: new Date().toISOString(),
+          priority: 'medium' as const,
+          category: 'general' as const,
         }));
         await dbService.createBulkNotifications(notifications);
       } else if (newNotification.recipientType === 'partner') {
         // Send to specific partner
         if (!newNotification.selectedPartnerId) {
-          alert('Please select a partner');
+          showToast('Please select a partner', 'warning');
           return;
         }
         await dbService.createNotification({
@@ -128,11 +136,14 @@ const AdminNotificationsPage: React.FC = () => {
           message: newNotification.message,
           type: newNotification.type,
           status: 'pending',
+          createdAt: new Date().toISOString(),
+          priority: 'medium',
+          category: 'general',
         });
       } else if (newNotification.recipientType === 'user') {
         // Send to specific user
         if (!newNotification.selectedUserId) {
-          alert('Please select a user');
+          showToast('Please select a user', 'warning');
           return;
         }
         await dbService.createNotification({
@@ -141,6 +152,9 @@ const AdminNotificationsPage: React.FC = () => {
           message: newNotification.message,
           type: newNotification.type,
           status: 'pending',
+          createdAt: new Date().toISOString(),
+          priority: 'medium',
+          category: 'general',
         });
       }
 
@@ -157,16 +171,7 @@ const AdminNotificationsPage: React.FC = () => {
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating notification:', error);
-      alert('Failed to create notification');
-    }
-  };
-
-  const handleSendNotification = async (notificationId: string) => {
-    try {
-      await dbService.sendNotification(notificationId);
-    } catch (error) {
-      console.error('Error sending notification:', error);
-      alert('Failed to send notification');
+      showToast('Failed to create notification', 'error');
     }
   };
 
@@ -179,63 +184,10 @@ const AdminNotificationsPage: React.FC = () => {
       for (const notification of notifications) {
         await dbService.deleteNotification(notification.id);
       }
-      alert('All notifications cleared successfully');
+      showToast('All notifications cleared', 'success');
     } catch (error) {
       console.error('Error clearing notifications:', error);
-      alert('Failed to clear notifications');
-    }
-  };
-
-  const createVerificationUpdate = (partner: Partner) => {
-    setNewNotification({
-      title: 'Verification Status Update',
-      message: `Your verification status has been updated to: ${partner.status.replace('_', ' ').toUpperCase()}`,
-      type: 'verification',
-      category: 'verification_update',
-      priority: 'high',
-      targetPartners: [partner.id],
-      isBroadcast: false,
-      metadata: {
-        verificationStatus: partner.status
-      }
-    });
-    setShowCreateModal(true);
-  };
-
-  const createRewardAnnouncement = () => {
-    setNewNotification({
-      title: 'Reward Points Earned!',
-      message: 'Congratulations! You have earned reward points for completing waste pickups. Check your dashboard for details.',
-      type: 'reward',
-      category: 'reward_announcement',
-      priority: 'medium',
-      targetPartners: [],
-      isBroadcast: true,
-      metadata: {}
-    });
-    setShowCreateModal(true);
-  };
-
-  const createSubscriptionReminder = () => {
-    setNewNotification({
-      title: 'Subscription Renewal Reminder',
-      message: 'Your subscription is expiring soon. Please renew to continue enjoying premium features.',
-      type: 'subscription',
-      category: 'subscription_reminder',
-      priority: 'high',
-      targetPartners: [],
-      isBroadcast: true,
-      metadata: {}
-    });
-    setShowCreateModal(true);
-  };
-
-  const getStatusColor = (status: Notification['status']) => {
-    switch (status) {
-      case 'sent': return 'bg-green-100 text-green-800 border-green-200';
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'failed': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      showToast('Failed to clear notifications', 'error');
     }
   };
 
@@ -274,8 +226,6 @@ const AdminNotificationsPage: React.FC = () => {
 
     return matchesType && matchesRecipient && matchesSearch;
   });
-
-  const sentCount = notifications.filter(n => n.status === 'sent').length;
 
   if (loading) {
     return (

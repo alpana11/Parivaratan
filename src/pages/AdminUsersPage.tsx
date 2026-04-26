@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import Spinner from '../components/Spinner';
 
 interface User {
   id: string;
@@ -30,7 +31,7 @@ const AdminUsersPage: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="flex justify-center items-center h-64">Loading...</div>;
+    return <Spinner fullScreen={false} />;
   }
 
   return (
