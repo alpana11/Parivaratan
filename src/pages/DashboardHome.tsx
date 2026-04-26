@@ -3,6 +3,7 @@ import { useWasteRequests, useImpactMetrics } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
+import AIWasteAdvisor from '../components/AIWasteAdvisor';
 
 interface Analysis {
   totalRequests: number;
@@ -185,6 +186,9 @@ const DashboardHome: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI Waste Advisor */}
+      <AIWasteAdvisor />
 
       {/* Recent Activity */}
       <div className="bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden">
