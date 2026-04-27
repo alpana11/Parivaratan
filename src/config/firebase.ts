@@ -2,7 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-// Note: Firebase Storage removed - using Cloudinary instead (no billing required)
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 // Your web app's Firebase configuration using environment variables
 const firebaseConfig = {
@@ -40,6 +40,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-// Storage: Using Cloudinary instead (see cloudinaryService.ts)
+export const messaging = getMessaging(app);
+export { getToken, onMessage };
 
 export default app;

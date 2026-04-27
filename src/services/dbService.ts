@@ -55,23 +55,16 @@ export const dbService = {
   async updateWasteRequest(id: string, updates: Partial<WasteRequest>) {
     try {
       const docRef = doc(db, 'wasteRequests', id);
-      
-      // If marking as completed, calculate and set ecoPointsAwarded, then increment user's ecoPoints
+
       if (updates.status === 'Completed') {
-        console.log('🎯 Marking request as Completed...');
         const requestDoc = await getDoc(docRef);
         const requestData = requestDoc.data();
-        
         const userId = requestData?.userId;
         const wasteType = requestData?.type;
         const quantityStr = requestData?.quantity || '0';
         const quantity = parseFloat(quantityStr.toString().replace(/[^0-9.]/g, '')) || 0;
-        
         let ecoPointsAwarded = requestData?.ecoPointsAwarded;
-        
-        // If ecoPointsAwarded doesn't exist, calculate it from rewardRules
         if (!ecoPointsAwarded && wasteType) {
-          console.log('⚙️ Calculating ecoPoints from rewardRules...');
           try {
             const rulesQuery = query(
               collection(db, 'rewardRules'),
@@ -79,57 +72,31 @@ export const dbService = {
               where('isActive', '==', true)
             );
             const rulesSnapshot = await getDocs(rulesQuery);
-            
-            if (!rulesSnapshot.empty) {
-              const rule = rulesSnapshot.docs[0].data();
-              const pointsPerKg = rule.pointsPerKg || 0;
-              ecoPointsAwarded = Math.round(quantity * pointsPerKg);
-              console.log(`📊 Calculated: ${quantity}kg × ${pointsPerKg} points/kg = ${ecoPointsAwarded} points`);
-            } else {
-              ecoPointsAwarded = 10; // Default if no rule found
-              console.log('⚠️ No reward rule found, using default: 10 points');
-            }
-          } catch (error) {
-            console.error('❌ Error fetching reward rules:', error);
-            ecoPointsAwarded = 10; // Fallback
+            ecoPointsAwarded = !rulesSnapshot.empty
+              ? Math.round(quantity * (rulesSnapshot.docs[0].data().pointsPerKg || 0))
+              : 10;
+          } catch {
+            ecoPointsAwarded = 10;
           }
-          
-          // Set ecoPointsAwarded in the waste request
-          await updateDoc(docRef, {
-            ecoPointsAwarded: ecoPointsAwarded
-          });
+          try { await updateDoc(docRef, { ecoPointsAwarded }); } catch { /* ignore */ }
         }
-        
-        console.log('userId:', userId);
-        console.log('ecoPointsAwarded:', ecoPointsAwarded);
-
         if (userId && ecoPointsAwarded) {
-          console.log(`✅ Incrementing ${ecoPointsAwarded} ecoPoints for user ${userId}`);
-          const userRef = doc(db, 'users', userId);
-          
           try {
-            await updateDoc(userRef, {
-              ecoPoints: increment(ecoPointsAwarded)
-            });
-            console.log('✅ EcoPoints incremented successfully!');
-          } catch (error) {
-            console.error('❌ Firestore permission error or user not found:', error);
-            throw error;
-          }
-        } else {
-          console.warn('⚠️ Missing data - cannot increment ecoPoints:', { userId, ecoPointsAwarded });
+            await updateDoc(doc(db, 'users', userId), { ecoPoints: increment(ecoPointsAwarded) });
+          } catch { /* ignore */ }
         }
       }
-      
-      // Then update the waste request status
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: Timestamp.now(),
-      });
-      
-      console.log('✅ Waste request updated successfully');
+
+      // Only send fields Firestore accepts
+      const safeUpdates: Record<string, any> = { updatedAt: Timestamp.now() };
+      const allowedFields = ['status', 'scheduleMethod', 'scheduledDate', 'scheduledTime', 'confirmationStatus', 'confirmationSentAt', 'ecoPointsAwarded'];
+      for (const key of allowedFields) {
+        if (key in updates && (updates as any)[key] !== undefined) {
+          safeUpdates[key] = (updates as any)[key];
+        }
+      }
+      await updateDoc(docRef, safeUpdates);
     } catch (error) {
-      console.error('❌ Error in updateWasteRequest:', error);
       throw error;
     }
   },
@@ -889,34 +856,30 @@ export const dbService = {
 
   // Real-time listeners
   subscribeToWasteRequestsForPartner(partnerId: string, callback: (requests: WasteRequest[]) => void) {
-    console.log('🔍 SUBSCRIPTION START - Partner ID:', partnerId);
-    
     let assignedRequests: WasteRequest[] = [];
     let requestedRequests: WasteRequest[] = [];
-    let updateCounter = 0;
-    
+    let initialized1 = false;
+    let initialized2 = false;
+
     const mergeAndCallback = () => {
-      updateCounter++;
-      if (updateCounter % 2 === 0) {
-        const allRequests = [...assignedRequests, ...requestedRequests];
-        const uniqueRequests = Array.from(
-          new Map(allRequests.map(req => [req.id, req])).values()
-        );
-        console.log('📊 Total:', uniqueRequests.length, '(assigned:', assignedRequests.length, ', requested:', requestedRequests.length, ')');
-        callback(uniqueRequests);
-      }
+      if (!initialized1 || !initialized2) return;
+      const allRequests = [...assignedRequests, ...requestedRequests];
+      const uniqueRequests = Array.from(
+        new Map(allRequests.map(req => [req.id, req])).values()
+      );
+      callback(uniqueRequests);
     };
-    
+
     const q1 = query(
-      collection(db, 'wasteRequests'), 
+      collection(db, 'wasteRequests'),
       where('partnerId', '==', partnerId)
     );
-    
+
     const q2 = query(
       collection(db, 'wasteRequests'),
       where('status', '==', 'Requested')
     );
-    
+
     const unsubscribe1 = onSnapshot(q1, (querySnapshot) => {
       assignedRequests = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -927,9 +890,10 @@ export const dbService = {
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
         };
       }) as WasteRequest[];
+      initialized1 = true;
       mergeAndCallback();
     });
-    
+
     const unsubscribe2 = onSnapshot(q2, (querySnapshot) => {
       requestedRequests = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -940,9 +904,10 @@ export const dbService = {
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
         };
       }) as WasteRequest[];
+      initialized2 = true;
       mergeAndCallback();
     });
-    
+
     return () => {
       unsubscribe1();
       unsubscribe2();

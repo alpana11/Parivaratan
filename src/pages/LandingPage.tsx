@@ -4,6 +4,7 @@ import { collection, addDoc, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
+import ChatBot from '../components/ChatBot';
 import { useToast } from '../components/Toast';
 
 const LandingPage: React.FC = () => {
@@ -596,6 +597,8 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ChatBot />
 
       {/* Footer */}
       <footer className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-12">
