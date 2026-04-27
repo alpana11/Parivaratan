@@ -8,7 +8,7 @@ const NotificationsPage: React.FC = () => {
   const { partner } = useAuth();
   const { streamActive, updateCount: pathwayUpdateCount } = useWasteRequests();
   const { showToast } = useToast();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
     if (!partner?.id) return;

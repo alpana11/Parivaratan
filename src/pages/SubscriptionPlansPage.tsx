@@ -13,25 +13,7 @@ interface LocalPlan {
 }
 
 const SubscriptionPlansPage: React.FC = () => {
-  const [plans, setPlans] = useState<LocalPlan[]>([]);
-  const navigate = useNavigate();
-  const { showToast } = useToast();
-
-  useEffect(() => {
-    // Load plans from database with real-time updates
-    const unsubscribe = dbService.subscribeToSubscriptionPlans((dbPlans) => {
-      if (dbPlans.length > 0) {
-        setPlans(dbPlans.filter(p => p.isActive));
-      } else {
-        // Fallback to default plans if database is empty
-        setPlans(defaultPlans);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const defaultPlans = [
+  const defaultPlans: LocalPlan[] = [
     {
       id: 'monthly',
       name: 'Monthly Plan',
@@ -84,6 +66,32 @@ const SubscriptionPlansPage: React.FC = () => {
       popular: false
     }
   ];
+
+  const [plans, setPlans] = useState<LocalPlan[]>(defaultPlans);
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    // Load plans from database with real-time updates
+    const unsubscribe = dbService.subscribeToSubscriptionPlans((dbPlans) => {
+      if (dbPlans.length > 0) {
+        const transformedPlans = dbPlans.filter(p => p.isActive).map((p): LocalPlan => ({
+          id: p.id,
+          name: p.name,
+          price: p.price || p.amount,
+          duration: p.duration,
+          features: p.features,
+          popular: p.popular || false
+        }));
+        setPlans(transformedPlans);
+      } else {
+        // Fallback to default plans if database is empty
+        setPlans(defaultPlans);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handlePlanSelection = (planId: string) => {
     const selectedPlanData = plans.find(p => p.id === planId);

@@ -96,7 +96,7 @@ const AdminWasteRequestsPage: React.FC = () => {
         case 'date':
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         case 'status':
-          return a.status.localeCompare(b.status);
+          return (a.status || '').localeCompare(b.status || '');
         case 'location':
           const locA = typeof a.location === 'string' ? a.location : a.location?.city || '';
           const locB = typeof b.location === 'string' ? b.location : b.location?.city || '';

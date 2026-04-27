@@ -140,6 +140,8 @@ const PartnerDashboard: React.FC = () => {
     );
   }
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
     { name: 'Waste Requests', href: '/dashboard/requests', icon: '📦' },
@@ -152,22 +154,30 @@ const PartnerDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-white/95 backdrop-blur-sm shadow-2xl border-r border-gray-200">
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-center h-16 bg-gradient-to-r from-emerald-600 to-blue-600 shadow-lg">
-            <h1 className="text-4xl font-bold text-white">Parivartan</h1>
-          </div>
 
-          <nav className="flex-1 px-4 py-6 space-y-2">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar — hidden on mobile, visible on desktop */}
+      <div className={`fixed inset-y-0 left-0 w-64 bg-white/95 backdrop-blur-sm shadow-2xl border-r border-gray-200 z-30 transform transition-transform duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between h-16 bg-gradient-to-r from-emerald-600 to-blue-600 shadow-lg px-4">
+            <h1 className="text-2xl font-bold text-white">Parivartan</h1>
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white text-2xl">×</button>
+          </div>
+          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 ${
                   location.pathname === item.href
-                    ? 'bg-gradient-to-r from-emerald-100 to-blue-100 text-emerald-700 shadow-lg transform scale-105'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-emerald-600 hover:shadow-md hover:transform hover:scale-102'
+                    ? 'bg-gradient-to-r from-emerald-100 to-blue-100 text-emerald-700 shadow-lg'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-emerald-600'
                 }`}
               >
                 <span className="mr-3 text-lg">{item.icon}</span>
@@ -180,19 +190,14 @@ const PartnerDashboard: React.FC = () => {
               </Link>
             ))}
           </nav>
-
           <div className="p-4 border-t border-gray-200 bg-gray-50/50">
-            <div className="flex items-center p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
-              <div className="flex-shrink-0">
-                <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                  <span className="text-white text-sm font-bold">
-                    {partnerName.charAt(0)}
-                  </span>
-                </div>
+            <div className="flex items-center p-3 bg-white rounded-xl shadow-sm">
+              <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg flex-shrink-0">
+                <span className="text-white text-sm font-bold">{partnerName.charAt(0)}</span>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-semibold text-gray-900">{partnerName}</p>
-                <p className="text-xs text-gray-500">{partnerEmail}</p>
+              <div className="ml-3 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{partnerName}</p>
+                <p className="text-xs text-gray-500 truncate">{partnerEmail}</p>
               </div>
             </div>
           </div>
@@ -200,11 +205,44 @@ const PartnerDashboard: React.FC = () => {
       </div>
 
       {/* Main content */}
-      <div className="ml-64">
-        <main className="p-8">
+      <div className="lg:ml-64 min-h-screen">
+        {/* Mobile top bar */}
+        <div className="lg:hidden sticky top-0 z-10 bg-white shadow-md px-4 py-3 flex items-center justify-between">
+          <button onClick={() => setSidebarOpen(true)} className="text-gray-600 text-2xl">☰</button>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">Parivartan</h1>
+          <Link to="/dashboard/notifications" className="relative">
+            <span className="text-xl">🔔</span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>
+            )}
+          </Link>
+        </div>
+        <main className="p-4 lg:p-8 pb-20 lg:pb-8">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-10">
+        <div className="flex justify-around items-center py-2">
+          {navigation.slice(0, 5).map((item) => (
+            <Link
+              key={item.name}
+              to={item.href}
+              className={`flex flex-col items-center px-2 py-1 text-xs ${
+                location.pathname === item.href ? 'text-emerald-600' : 'text-gray-500'
+              }`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="mt-0.5 truncate w-12 text-center">{item.name.split(' ')[0]}</span>
+              {item.name === 'Notifications' && unreadCount > 0 && (
+                <span className="absolute top-1 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>
+              )}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <ChatBot />
     </div>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import FloatingActionButton from '../components/FloatingActionButton';
@@ -7,6 +7,7 @@ const AdminDashboard: React.FC = () => {
   const { admin, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -27,16 +28,27 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Header */}
       <header className="bg-gradient-to-r from-white to-gray-50 shadow-lg border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden mr-4 text-gray-600 text-2xl hover:text-gray-900"
+              >
+                ☰
+              </button>
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-green-500 rounded-xl flex items-center justify-center shadow-lg">
                   <span className="text-white font-bold text-lg">P</span>
                 </div>
-                <div>
+                <div className="hidden sm:block">
                   <h1 className="text-xl font-bold text-gray-900">PARIVARTAN</h1>
                   <p className="text-xs text-gray-500">Admin Panel</p>
                 </div>
@@ -67,8 +79,9 @@ const AdminDashboard: React.FC = () => {
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
-        <nav className="w-64 flex-shrink-0 bg-white shadow-lg h-screen sticky top-0 border-r border-gray-200 overflow-y-auto">
+        {/* Sidebar — hidden on mobile, visible on desktop */}
+        <nav className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg h-screen border-r border-gray-200 overflow-y-auto z-30 transform transition-transform duration-300
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:flex-shrink-0`}>
           <div className="p-6">
             <div className="mb-8">
               {/* Title moved to header */}
@@ -77,6 +90,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/dashboard"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/dashboard')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -93,6 +107,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/users"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/users')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -109,6 +124,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/waste-requests"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/waste-requests')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -125,6 +141,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/partners"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/partners')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -141,6 +158,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/documents"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/documents')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -157,6 +175,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/subscriptions"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/subscriptions')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -173,6 +192,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/rewards"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/rewards')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -189,6 +209,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/vouchers"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/vouchers')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -205,6 +226,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/scheduling"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/scheduling')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -221,6 +243,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/analytics"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/analytics')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -237,6 +260,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/notifications"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/notifications')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -253,6 +277,7 @@ const AdminDashboard: React.FC = () => {
               <li>
                 <Link
                   to="/admin/community"
+                  onClick={() => setSidebarOpen(false)}
                   className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                     isActiveRoute('/admin/community')
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
@@ -272,7 +297,7 @@ const AdminDashboard: React.FC = () => {
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-x-hidden px-8 pt-8 pb-8">
+        <main className="flex-1 overflow-x-hidden px-4 sm:px-8 pt-8 pb-8 lg:ml-0">
           <Outlet />
         </main>
       </div>

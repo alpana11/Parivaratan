@@ -61,9 +61,9 @@ const LandingPage: React.FC = () => {
       {/* Header */}
       <header className="bg-white/90 backdrop-blur-sm shadow-lg border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+          <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">Parivartan</h1>
+              <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">Parivartan</h1>
             </div>
             <nav className="hidden md:flex space-x-8">
               <Link to="/" className="text-gray-700 hover:text-emerald-600 font-medium transition-colors duration-200 relative group">
@@ -78,8 +78,12 @@ const LandingPage: React.FC = () => {
                 Partner Sign-Up
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-emerald-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
-
             </nav>
+            {/* Mobile nav buttons */}
+            <div className="flex md:hidden space-x-2">
+              <Link to="/signin" className="text-sm text-emerald-600 font-semibold border border-emerald-600 px-3 py-1.5 rounded-lg">Sign In</Link>
+              <Link to="/signup" className="text-sm text-white font-semibold bg-emerald-600 px-3 py-1.5 rounded-lg">Sign Up</Link>
+            </div>
           </div>
         </div>
       </header>
@@ -88,7 +92,7 @@ const LandingPage: React.FC = () => {
       <section className="py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-blue-400/10"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-          <h2 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 leading-tight">
+          <h2 className="text-3xl md:text-7xl font-bold text-gray-900 mb-6 leading-tight">
             Join the <span className="bg-gradient-to-r from-emerald-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent animate-pulse">Waste Revolution</span>
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
@@ -169,7 +173,7 @@ const LandingPage: React.FC = () => {
               <div className="h-0.5 bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400 rounded-full"></div>
             </div>
 
-            <div className="grid md:grid-cols-5 gap-8 relative z-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 relative z-10">
               {/* Step 1: Waste Detection */}
               <div className="text-center group">
                 <div className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 border border-gray-100 mx-auto max-w-xs">
@@ -279,12 +283,14 @@ const LandingPage: React.FC = () => {
               Our AI system can identify and classify various types of waste for efficient processing.
             </p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             {[
               { emoji: '🧴', label: 'Plastic Bottles', tag: 'Recyclable', from: 'from-blue-100', to: 'to-blue-200', text: 'text-blue-600' },
               { emoji: '📄', label: 'Paper Waste', tag: 'Biodegradable', from: 'from-yellow-100', to: 'to-yellow-200', text: 'text-yellow-700' },
               { emoji: '💻', label: 'Electronic Waste', tag: 'Hazardous', from: 'from-red-100', to: 'to-red-200', text: 'text-red-600' },
               { emoji: '👕', label: 'Clothes', tag: 'Donateable', from: 'from-purple-100', to: 'to-purple-200', text: 'text-purple-600' },
+              { emoji: '🥫', label: 'Metal & Cans', tag: 'Recyclable', from: 'from-gray-100', to: 'to-gray-200', text: 'text-gray-700' },
+              { emoji: '🗑️', label: 'Trash', tag: 'General Waste', from: 'from-orange-100', to: 'to-orange-200', text: 'text-orange-600' },
             ].map((item) => (
               <div key={item.label} className={`group bg-gradient-to-br ${item.from} ${item.to} rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 h-48 flex flex-col items-center justify-center gap-3`}>
                 <span className="text-6xl group-hover:scale-110 transition-transform duration-300">{item.emoji}</span>

@@ -182,7 +182,7 @@ const PickupHistoryPage: React.FC = () => {
                               <span className="font-medium">Phone:</span> {pickup.userPhone || pickup.phoneNumber || 'N/A'}
                             </div>
                             <div>
-                              <span className="font-medium">Location:</span> {typeof pickup.location === 'string' ? pickup.location : pickup.area || [pickup.location?.house, pickup.location?.street, pickup.location?.city, pickup.location?.pincode].filter(Boolean).join(', ')}
+                              <span className="font-medium">Location:</span> {typeof pickup.area === 'string' ? pickup.area : typeof pickup.location === 'string' ? pickup.location : [pickup.area?.house || pickup.location?.house, pickup.area?.street || pickup.location?.street, pickup.area?.city || pickup.location?.city, pickup.area?.pincode || pickup.location?.pincode].filter(Boolean).join(', ') || 'N/A'}
                             </div>
                             <div className="col-span-2 bg-blue-100 p-2 rounded">
                               <span className="font-medium text-blue-900">📅 Scheduled:</span> <span className="text-blue-900 font-semibold">{pickup.scheduledDate ? new Date(pickup.scheduledDate).toLocaleDateString() : pickup.date ? new Date(pickup.date).toLocaleDateString() : 'N/A'} at {pickup.scheduledTime || pickup.time || 'N/A'}</span>

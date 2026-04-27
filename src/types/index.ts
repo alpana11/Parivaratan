@@ -6,9 +6,11 @@ export interface SubscriptionPlan {
   id: string;
   name: string;
   amount: number;
+  price?: number;
   duration: SubscriptionDuration;
   features: string[];
   isActive: boolean;
+  popular?: boolean;
 }
 
 export interface PartnerSubscription {
@@ -21,7 +23,7 @@ export interface PartnerSubscription {
   transactionId?: string;
 }
 
-export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected' | 'In Progress' | 'Completed' | 'Assigned' | 'Requested';
+export type WasteRequestStatus = 'pending' | 'accepted' | 'rejected' | 'In Progress' | 'Completed' | 'Assigned' | 'Requested' | string;
 
 export interface Location {
   house?: string;
@@ -43,10 +45,13 @@ export interface WasteRequest {
   userName?: string;
   quantity: string;
   itemCount?: number;
-  location: string | Location;
-  status: WasteRequestStatus;
+  requestId?: string;
+  area?: string | Location;
+  location?: string | Location;
+  time?: string;
   createdAt: string;
   date: string;
+  status?: WasteRequestStatus;
   scheduleMethod?: 'pickup' | 'dropoff';
   scheduledDate?: string;
   scheduledTime?: string;
@@ -65,6 +70,7 @@ export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export interface PartnerDocument {
   type: DocumentType;
   url: string;
+  name?: string;
   uploadedAt: string;
   verified: VerificationStatus;
   remarks?: string;
@@ -235,6 +241,7 @@ export interface ScheduledPickup {
   wasteType?: string;
   image?: string;
   imageUrl?: string;
+  wasteImage?: string;
   quantity?: string;
   notes?: string;
   status: string;
@@ -249,12 +256,14 @@ export interface NearbyArea {
   lng: number;
   distance: string;
 }
+
+export interface PickupSchedule {
   id: string;
   area: string | Location;
-  date: string; // ISO date string
-  timeSlot: string; // e.g., "09:00-11:00"
+  date: string;
+  timeSlot: string;
   assignedPartnerId: string;
-  wasteRequestIds: string[]; // IDs of waste requests scheduled for this slot
+  wasteRequestIds: string[];
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   notes?: string;
   createdAt: string;
@@ -264,7 +273,7 @@ export interface NearbyArea {
 export interface AreaSchedule {
   area: string | Location;
   schedules: PickupSchedule[];
-  assignedPartners: string[]; // Partner IDs assigned to this area
-  capacity: number; // Max pickups per day
+  assignedPartners: string[];
+  capacity: number;
   priority: 'low' | 'medium' | 'high';
 }
